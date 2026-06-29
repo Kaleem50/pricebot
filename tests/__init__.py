@@ -1,0 +1,1 @@
+"""tests — PriceBot test suite."""

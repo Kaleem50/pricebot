@@ -1,0 +1,45 @@
+# Environment — NEVER commit
+.env
+.env.local
+.env.production
+.env.staging
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+frontend/.next/
+frontend/node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Keys and secrets
+*.pem
+*.key
+*.p12
+*.pfx
