@@ -25,6 +25,7 @@ cryptography>=42.0.0           # AES-256-GCM for platform credentials
 
 # ── Background Jobs ────────────────────────────────────────
 apscheduler>=3.10.0
+tenacity>=8.3.0            # Retry decorator for platform connectors (platforms/base.py)
 
 # ── Environment ────────────────────────────────────────────
 python-dotenv>=1.0.0

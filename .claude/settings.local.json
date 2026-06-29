@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(python -c \"from api.main import app; from api.dependencies import get_current_user, Tier, AuthenticatedUser; from api.middleware.auth_guard import require_tier; from api.middleware.rate_limiter import RateLimiter, TokenBucket, RATE_LIMITS; from db.client import get_db; print\\('All imports OK'\\)\")",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -m pytest tests/unit/test_billing_webhook.py -v)",
+      "Bash(python3 -c \"import stripe; print\\(stripe.__version__\\); print\\(dir\\(stripe\\)\\)\")",
+      "Bash(python3 -m pytest tests/ -v)"
     ]
   }
 }
