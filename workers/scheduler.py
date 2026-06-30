@@ -22,6 +22,7 @@ Logging:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import signal
@@ -34,6 +35,9 @@ from dotenv import load_dotenv
 
 # Load .env into process environment BEFORE any imports of settings
 load_dotenv()
+
+# logger must be defined before the production guard below uses it
+logger = logging.getLogger(__name__)
 
 # Startup guard: prevent mock connector in production
 _ENVIRONMENT = os.environ.get("ENVIRONMENT", "development").lower()
@@ -54,8 +58,6 @@ from db.client import get_db
 from workers.batch_poller import BatchPoller
 from workers.batch_submitter import BatchSubmitter
 from workers.stale_job_recovery import StaleJobRecovery
-
-logger = logging.getLogger(__name__)
 
 # Thread lock to ensure only one submission cycle runs at a time
 _submission_lock = threading.Lock()
@@ -117,7 +119,11 @@ def run_submission_cycle() -> None:
                 tier = Tier.STARTER
 
             try:
-                result = submitter.submit_for_user(user_id=user_id, db=db, tier=tier)
+                # submit_for_user is async; APScheduler runs jobs in threads so we
+                # need asyncio.run() to create a fresh event loop for this thread.
+                result = asyncio.run(
+                    submitter.submit_for_user(user_id=user_id, db=db, tier=tier)
+                )
                 if result:
                     logger.info(
                         "User batch submitted",
