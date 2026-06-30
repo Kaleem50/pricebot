@@ -114,23 +114,27 @@ class BatchSubmitter:
 
         try:
             idle_result = (
-                db.table("repricing_jobs")
-                .select("id, product_id, platform")
+                db.table("products")
+                .select(
+                    "id, platform, platform_product_id, platform_sku, title, current_price, cost, min_margin_floor, last_repriced_at"
+                )
                 .eq("user_id", user_id)
                 .eq("state", "IDLE")
+                .eq("is_tracking", True)
+                .order("last_repriced_at", desc=False)
                 .execute()
             )
         except Exception as exc:
             logger.error(
-                "Failed to query IDLE repricing jobs",
+                "Failed to query IDLE products",
                 extra={"user_id": user_id, "error": str(exc)},
             )
             raise
 
-        idle_jobs = idle_result.data or []
-        if not idle_jobs:
+        idle_products = idle_result.data or []
+        if not idle_products:
             logger.info(
-                "No IDLE jobs to submit",
+                "No IDLE products to submit",
                 extra={"user_id": user_id},
             )
             return None
@@ -139,17 +143,17 @@ class BatchSubmitter:
         product_limit = TIER_LIMITS[tier]["max_products"]
         daily_cycle_limit = TIER_LIMITS[tier]["max_daily_cycles"]
 
-        if len(idle_jobs) > product_limit:
+        if len(idle_products) > product_limit:
             logger.warning(
                 "Product count exceeds tier limit — truncating",
                 extra={
                     "user_id": user_id,
                     "tier": tier.name,
-                    "idle_count": len(idle_jobs),
+                    "idle_count": len(idle_products),
                     "tier_limit": product_limit,
                 },
             )
-            idle_jobs = idle_jobs[:product_limit]
+            idle_products = idle_products[:product_limit]
 
         # Check daily cycle count
         try:
@@ -186,33 +190,16 @@ class BatchSubmitter:
             )
             return None
 
-        # Step 3: Fetch product data and competitor prices
+        # Step 3: Fetch competitor prices for products
         logger.info(
-            "Fetching products and competitor prices",
-            extra={"user_id": user_id, "product_count": len(idle_jobs)},
+            "Fetching competitor prices",
+            extra={"user_id": user_id, "product_count": len(idle_products)},
         )
 
-        product_ids = [job["product_id"] for job in idle_jobs]
-        try:
-            products_result = (
-                db.table("products")
-                .select(
-                    "id, platform_product_id, title, current_price, cost, min_margin_floor, platform, platform_sku, platform_context, metadata"
-                )
-                .eq("user_id", user_id)
-                .in_("id", product_ids)
-                .execute()
-            )
-        except Exception as exc:
-            logger.error(
-                "Failed to fetch products",
-                extra={"user_id": user_id, "error": str(exc)},
-            )
-            raise
-
-        products_by_id = {p["id"]: p for p in (products_result.data or [])}
+        # Build products_by_id from idle_products data
+        products_by_id = {p["id"]: p for p in idle_products}
         if not products_by_id:
-            logger.info("No products found for IDLE jobs", extra={"user_id": user_id})
+            logger.info("No products found for submission", extra={"user_id": user_id})
             return None
 
         # Group products by platform so we can instantiate connectors

@@ -7,7 +7,18 @@
       "Bash(python3 -c \"import stripe; print\\(stripe.__version__\\); print\\(dir\\(stripe\\)\\)\")",
       "Bash(python3 -m pytest tests/ -v)",
       "Bash(python3)",
-      "Bash(python3 scripts/seed_test_products.py --user-id 4eb93e47-979c-4cab-814e-e25bf275524b)"
+      "Bash(python3 scripts/seed_test_products.py --user-id 4eb93e47-979c-4cab-814e-e25bf275524b)",
+      "Bash(ENVIRONMENT=development MOCK_PLATFORM_MODE=true uvicorn api.main:app --reload --port 8000)",
+      "Bash(echo \"✓ API started \\(PID: $!\\)\")",
+      "Read(//tmp/**)",
+      "Bash(pkill -f \"uvicorn api.main\")",
+      "Bash(awk '{print $2}')",
+      "Bash(xargs kill -9)",
+      "Bash(ENVIRONMENT=development MOCK_PLATFORM_MODE=true uvicorn api.main:app --port 8000)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(curl -X POST http://localhost:8000/repricing/trigger-cycle -H 'Authorization: Bearer eyJhbGciOiJFUzI1NiIsImtpZCI6IjliMTdiYmI2LWZiZmUtNDgzYi04MzBjLTNmMmU2YmY5M2Y3OSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL25hY3VvdXVpbGlnZHB1cm16d29tLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI0ZWI5M2U0Ny05NzljLTRjYWItODE0ZS1lMjViZjI3NTUyNGIiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzgyODIzOTM4LCJpYXQiOjE3ODI4MjAzMzgsImVtYWlsIjoiaWthbGVlbTUwQGdtYWlsLmNvbSIsInBob25lIjoiIiwiYXBwX21ldGFkYXRhIjp7InByb3ZpZGVyIjoiZW1haWwiLCJwcm92aWRlcnMiOlsiZW1haWwiXX0sInVzZXJfbWV0YWRhdGEiOnsiZW1haWwiOiJpa2FsZWVtNTBAZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsInBob25lX3ZlcmlmaWVkIjpmYWxzZSwic3ViIjoiNGViOTNlNDctOTc5Yy00Y2FiLTgxNGUtZTI1YmYyNzU1MjRiIn0sInJvbGUiOiJhdXRoZW50aWNhdGVkIiwiYWFsIjoiYWFsMSIsImFtciI6W3sibWV0aG9kIjoicGFzc3dvcmQiLCJ0aW1lc3RhbXAiOjE3ODI4MjAzMzh9XSwic2Vzc2lvbl9pZCI6IjNkMGVhMTI1LWE3ZDgtNDNmNi1iZjdmLTI5NWE2YjEyMTI3ZCIsImlzX2Fub255bW91cyI6ZmFsc2V9.3kM2oOXelx48k2SbVXwd5vv1tMRGmMF_BKiu0p8S1phR35O8jr8WNpji6ScW7TyHPQBQAPqOwO1mBoYSCjbt1Q' -H 'Content-Type: application/json')",
+      "Bash(git add *)",
+      "Bash(git commit -m 'fix\\(batch_submitter\\): correct product query and handle async methods *)"
     ]
   }
 }
