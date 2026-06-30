@@ -18,6 +18,10 @@
 
 ## 1. What Is Done
 
+**Last verified:** 2026-07-01, via live QA pass (curl against running API + direct DB queries) + full pytest run (163/163 passing). See per-week sections below for detail.
+
+**Overall: Weeks 1–4 complete and verified. Week 5 half-done (dashboard side only). Weeks 6–8 not started — and Week 6 has a Critical pre-req bug to fix first (see Week 6 section).**
+
 | Item | Status |
 |---|---|
 | Core repricing engine (`core/repricing_engine.py`) | ✅ Built and tested |
@@ -28,8 +32,17 @@
 | All `docs/*.md` files | ✅ Generated |
 | Facebook validation posts (Amazon FBA, Etsy, Shopify, eBay) | ✅ Live |
 | Market signals: 3 Amazon FBA + 1 Etsy pain confirmations | ✅ Threshold cleared |
-| DB schema + RLS policies | ✅ Defined in `docs/DATABASE.md` |
-| FastAPI skeleton + auth middleware | ✅ Defined in `docs/ARCHITECTURE.md` |
+| DB schema + RLS policies | ✅ Built — `db/migrations/001_initial_schema.sql`, `002_competitor_price_cache.sql`, `db/rls_policies.sql` |
+| FastAPI skeleton + auth middleware | ✅ Built and live-tested — `api/main.py`, `api/dependencies.py`, `api/middleware/` |
+| Week 1 — Foundation Layer | ✅ Complete |
+| Week 2 — Amazon connector + billing code | ✅ Complete — Stripe account setup still blocked on founder |
+| Week 3 — Worker pipeline (batch submit/poll/scheduler/recovery) | ✅ Complete |
+| Week 4 — Dashboard MVP (+ dark mode, password toggle) | ✅ Complete |
+| Week 5 — Etsy connector | ❌ Not built (empty stub file) |
+| Week 5 — `/dashboard/history`, `/dashboard/settings`, repricing history API | ✅ Complete |
+| Week 5 — Email notifications, beta user list | ❌ Not started |
+| Week 6–8 | ⛔ Not started |
+| **Critical bug: shared DB-client singleton contaminated by login/register/refresh** | 🔴 **Found 2026-07-01, not yet fixed — blocks Week 6 beta access** |
 
 ---
 
@@ -37,130 +50,137 @@
 
 ---
 
-### WEEK 1 — Foundation Layer ✅ → IN PROGRESS
+### WEEK 1 — Foundation Layer ✅ COMPLETE
 
 **Goal:** Running FastAPI app connected to Supabase with auth working end-to-end.
 
 **Tasks:**
-- [ ] `db/migrations/001_initial_schema.sql` — full schema from `docs/DATABASE.md`
-- [ ] `db/rls_policies.sql` — all RLS policies applied
-- [ ] `db/client.py` — Supabase connection pool singleton
-- [ ] `api/main.py` — FastAPI application skeleton with CORS, middleware mount
-- [ ] `api/dependencies.py` — `get_db()`, `get_current_user()` shared dependencies
-- [ ] `api/middleware/auth_guard.py` — JWT validation, `user_id` extraction, tier check
-- [ ] `api/middleware/rate_limiter.py` — token-bucket rate limiter
-- [ ] `api/routers/auth.py` — register, login, refresh (delegates to Supabase Auth)
-- [ ] `Makefile` — `make dev`, `make test`, `make migrate` commands
-- [ ] Verify: `curl localhost:8000/health` returns 200; auth flow works end-to-end
+- [x] `db/migrations/001_initial_schema.sql` — full schema from `docs/DATABASE.md`
+- [x] `db/rls_policies.sql` — all RLS policies applied
+- [x] `db/client.py` — Supabase connection pool singleton
+- [x] `api/main.py` — FastAPI application skeleton with CORS, middleware mount
+- [x] `api/dependencies.py` — `get_db()`, `get_current_user()` shared dependencies
+- [x] `api/middleware/auth_guard.py` — JWT validation, `user_id` extraction, tier check
+- [x] `api/middleware/rate_limiter.py` — token-bucket rate limiter
+- [x] `api/routers/auth.py` — register, login, refresh (delegates to Supabase Auth)
+- [x] `Makefile` — `make dev`, `make test`, `make migrate` commands
+- [x] Verify: `curl localhost:8000/health` returns 200; auth flow works end-to-end — confirmed via live QA pass 2026-07-01
 
-**Success criteria:** A new user can register, log in, receive a JWT, and hit a protected route.
+**Success criteria:** ✅ MET — A new user can register, log in, receive a JWT, and hit a protected route. Verified live: register → 201, login → JWT, malformed/missing/expired token → 401, protected routes correctly JWT-gated.
 
 ---
 
-### WEEK 2 — Amazon Connector + Billing  ← ACTIVE
+### WEEK 2 — Amazon Connector + Billing  ✅ CODE COMPLETE — ⚠️ blocked on founder Stripe setup
 
 **Goal:** PriceBot can connect to a real Amazon seller account, pull products, fetch competitor prices, and bill via Stripe.
 
 **Tasks — Foundation:**
-- [ ] `core/crypto.py` — AES-256-GCM `encrypt_credential()` / `decrypt_credential()` utility
-- [ ] `platforms/base.py` — abstract `BasePlatformConnector` with full typed contract
-- [ ] `platforms/exceptions.py` — `PlatformAuthError`, `PlatformRateLimitError`, `PlatformProductNotFoundError`, `PlatformAPIError`
+- [x] `core/crypto.py` — AES-256-GCM `encrypt_credential()` / `decrypt_credential()` utility
+- [x] `platforms/base.py` — abstract `BasePlatformConnector` with full typed contract
+- [x] `platforms/exceptions.py` — `PlatformAuthError`, `PlatformRateLimitError`, `PlatformProductNotFoundError`, `PlatformAPIError`
 
-**Tasks — Amazon Connector (`platforms/amazon.py`):**
-- [ ] OAuth redirect handler: build auth URL, validate CSRF state on callback, exchange code for tokens
-- [ ] `_get_access_token()` — LWA token exchange with 1-hour in-memory cache
-- [ ] `validate_credentials()` — test token against a lightweight SP-API call
-- [ ] `get_products()` — paginated listings fetch, map to `MyProduct` models
-- [ ] `get_competitor_prices()` — batched ASIN lookup (20 per call), rate-limit sleep, map to `CompetitorProduct`
-- [ ] `apply_price()` — PATCH listings endpoint with `purchasable_offer`, retry on 429
-- [ ] Buy Box context builder — extract `buy_box_winner_price`, `seller_is_winner`, FBA vs FBM counts
-- [ ] Token-bucket rate limiter at connector level (1 req/sec for pricing, 5 req/sec for listings)
+**Tasks — Amazon Connector (`platforms/amazon.py`):** — 880 lines, fully implemented
+- [x] OAuth redirect handler: build auth URL, validate CSRF state on callback, exchange code for tokens
+- [x] `_get_access_token()` — LWA token exchange with 1-hour in-memory cache
+- [x] `validate_credentials()` — test token against a lightweight SP-API call
+- [x] `get_products()` — paginated listings fetch, map to `MyProduct` models
+- [x] `get_competitor_prices()` — batched ASIN lookup (20 per call), rate-limit sleep, map to `CompetitorProduct`
+- [x] `apply_price()` — PATCH listings endpoint with `purchasable_offer`, retry on 429
+- [x] Buy Box context builder — extract `buy_box_winner_price`, `seller_is_winner`, FBA vs FBM counts
+- [x] Token-bucket rate limiter at connector level (1 req/sec for pricing, 5 req/sec for listings)
 
 **Tasks — API Layer:**
-- [ ] `api/routers/platforms.py` — connect (store encrypted creds), disconnect, sync, list endpoints
-- [ ] `api/routers/products.py` — paginated product list, product detail, update margin floor
-- [ ] `api/routers/billing.py` — subscription status, Stripe portal session, webhook handler
+- [x] `api/routers/platforms.py` — connect (store encrypted creds), disconnect, sync, list endpoints
+- [x] `api/routers/products.py` — paginated product list, product detail, update margin floor
+- [x] `api/routers/billing.py` — subscription status, Stripe portal session, webhook handler
 
 **Tasks — Billing:**
-- [ ] Create Stripe products + price objects (founder action — Starter $9, Growth $29, Pro $59)
-- [ ] Add price IDs to `.env`
-- [ ] Stripe webhook: handle `subscription.created`, `subscription.updated`, `subscription.deleted`, `invoice.payment_failed`
+- [ ] ⚠️ **BLOCKED (founder action)** — Create Stripe products + price objects (Starter $9, Growth $29, Pro $59)
+- [ ] ⚠️ **BLOCKED (founder action)** — Add price IDs to `.env` — `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_*_PRICE_ID` are all still blank
+- [x] Stripe webhook: handle `subscription.created`, `subscription.updated`, `subscription.deleted`, `invoice.payment_failed`, `invoice.payment_succeeded` — code complete, idempotent on `stripe_sub_id`
 
 **Tasks — Tests:**
-- [ ] `tests/fixtures/amazon_responses.py` — mocked SP-API response fixtures
-- [ ] `tests/unit/test_amazon_connector.py` — all four methods with mocked HTTP
-- [ ] `tests/unit/test_crypto.py` — encrypt/decrypt round-trip, tampered ciphertext raises
-- [ ] `tests/unit/test_billing_webhook.py` — HMAC validation, each event type
+- [x] `tests/fixtures/amazon_responses.py` — mocked SP-API response fixtures
+- [x] `tests/unit/test_amazon_connector.py` — all four methods with mocked HTTP
+- [x] `tests/unit/test_crypto.py` — encrypt/decrypt round-trip, tampered ciphertext raises
+- [x] `tests/unit/test_billing_webhook.py` — HMAC validation, each event type (mocked — see live-verify gap below)
 
 **Verify:**
-- [ ] Founder connects their own Amazon Seller account through the API → products appear in DB
-- [ ] Competitor prices fetched for 3 test ASINs → correct shape in response
-- [ ] Stripe test webhook processed → `subscriptions` row updated in DB
-- [ ] Tampered encrypted credential raises `InvalidTag` on decrypt attempt
+- [ ] Founder connects their own Amazon Seller account through the API → products appear in DB *(founder action — code path tested with mocks, not yet exercised against real SP-API)*
+- [ ] Competitor prices fetched for 3 test ASINs → correct shape in response *(same — needs real Amazon sandbox/seller creds)*
+- [ ] ⚠️ Stripe test webhook processed → `subscriptions` row updated in DB — **cannot verify live**, `STRIPE_WEBHOOK_SECRET` unset. Live QA pass 2026-07-01 confirmed the missing-config path returns a clean 500 "Webhook service not configured" with no DB write — correct behavior, but the actual HMAC-valid/invalid signature branches remain unexercised.
+- [x] Tampered encrypted credential raises `InvalidTag` on decrypt attempt — covered in `test_crypto.py`
 
-**Success criteria:** Amazon credentials stored encrypted, products imported, competitor prices fetched, Stripe subscription webhook processed. All unit tests pass.
+**Success criteria:** Amazon credentials stored encrypted ✅, products imported ✅ (connector built, untested against live SP-API), competitor prices fetched ✅ (same caveat), Stripe subscription webhook processed ⚠️ (code complete, blocked on founder Stripe account setup). All unit tests pass ✅ — 163/163 as of 2026-07-01.
 
 ---
 
-### WEEK 3 — Worker Pipeline
+### WEEK 3 — Worker Pipeline ✅ COMPLETE
 
 **Goal:** Full repricing cycle running end-to-end with real Claude Batch API calls.
 
 **Tasks:**
-- [ ] `workers/batch_submitter.py` — collect IDLE jobs, build batch requests, submit to Anthropic
-- [ ] `workers/batch_poller.py` — poll batch status, parse results, trigger price applicator
-- [ ] `workers/scheduler.py` — APScheduler setup, 15-min submission cycle, 5-min poll cycle, 1-hr recovery
-- [ ] Price applicator logic within `batch_poller.py` — fail-safe guardrail, state transitions, `price_history` writes
-- [ ] `db/migrations/002_add_usage_events.sql` — usage tracking table
-- [ ] Cost monitoring: log token usage, cache hit rate, estimated cost per batch
-- [ ] Stale job recovery job (hourly)
-- [ ] Verify: Run full cycle with test Amazon products → see `price_history` rows written, correct state transitions
+- [x] `workers/batch_submitter.py` — collect IDLE jobs, build batch requests, submit to Anthropic
+- [x] `workers/batch_poller.py` — poll batch status, parse results, trigger price applicator
+- [x] `workers/scheduler.py` — APScheduler setup, 15-min submission cycle, 5-min poll cycle, 1-hr recovery
+- [x] Price applicator logic within `batch_poller.py` — fail-safe guardrail, state transitions, `price_history` writes
+- [x] usage tracking table — built into `001_initial_schema.sql` directly rather than a separate `002_add_usage_events.sql` migration
+- [x] Cost monitoring: token usage / cache hit / cost logged to `usage_events` in both `batch_submitter.py` and `batch_poller.py`
+- [x] `workers/stale_job_recovery.py` — stale job recovery, runs hourly via scheduler
+- [x] Verify: `price_history` has 8 rows from seeded test cycle; state transitions confirmed via direct DB query 2026-07-01
 
-**Success criteria:** End-to-end cycle completes. Jobs transition IDLE → BATCH_SUBMITTED → SYNCED. Fail-safe guardrail tested with a deliberately invalid Claude response.
+**Success criteria:** ✅ MET — End-to-end cycle completes. Jobs transition IDLE → BATCH_SUBMITTED → SYNCED. Fail-safe guardrail covered in `tests/unit/test_repricing_engine.py`.
 
 ---
 
-### WEEK 4 — Dashboard MVP
+### WEEK 4 — Dashboard MVP ✅ COMPLETE (plus extras)
 
 **Goal:** A non-technical seller can log in and understand exactly what PriceBot is doing.
 
 **Tasks:**
-- [ ] Next.js 14 project scaffold in `frontend/`
-- [ ] `/login` and `/register` pages with Supabase Auth integration
-- [ ] `/dashboard` — overview: product count, reprices today, estimated savings
-- [ ] `/dashboard/products` — product table: title, current price, suggested price, state badge, last updated
-- [ ] `PriceSuggestionCard` component — current price → suggested price + reasoning sentence + confidence badge
-- [ ] Platform connection wizard (Amazon only for now) — 4-step stepper
-- [ ] `/dashboard/billing` — current plan, product usage, upgrade CTA
-- [ ] Empty states: clear CTAs on every page with no data ("Connect your first store →")
-- [ ] Verify: Walk a non-technical person through the UI — they understand every element without explanation
+- [x] Next.js 14 project scaffold in `frontend/`
+- [x] `/login` and `/register` pages with Supabase Auth integration — plus password visibility toggle (eye icon), dark mode support
+- [x] `/dashboard` — overview: product count, reprices today, estimated savings
+- [x] `/dashboard/products` — product table: title, current price, suggested price, state badge, last updated
+- [x] `PriceSuggestionCard` component — current price → suggested price + reasoning sentence + confidence badge
+- [x] Platform connection wizard (Amazon only for now) — 4-step stepper
+- [x] `/dashboard/billing` — current plan, product usage, upgrade CTA
+- [x] Empty states: clear CTAs on every page with no data ("Connect your first store →")
+- [x] **Bonus (not originally scoped for Week 4):** Full dark-mode support across every page/component, theme toggle in `DashboardNav`
+- [ ] Verify: Walk a non-technical person through the UI — they understand every element without explanation *(needs a real human; no browser access available to Claude Code — hand this to founder)*
 
-**Success criteria:** A seller can register, connect their Amazon store, see their products, and understand a price suggestion — without asking a single question.
+**Success criteria:** ✅ MET (pending the human-walkthrough verify above) — A seller can register, connect their Amazon store, see their products, and understand a price suggestion. `npm run build` passes with 0 TypeScript errors as of 2026-07-01.
+
+**Known gap surfaced during QA (2026-07-01):** `/dashboard/products` had a bug where it silently showed the empty state despite products existing in the DB — root-caused to (1) a `UserResponse` unwrapping bug in `get_current_user()` (fixed) and (2) a more severe shared-singleton DB-client contamination bug in `db/client.py` that is **not yet fixed** — see Week 6 hardening notes.
 
 ---
 
-### WEEK 5 — Etsy Connector + Beta Prep
+### WEEK 5 — Etsy Connector + Beta Prep  🟡 PARTIAL — dashboard items done, Etsy connector + email + beta prep not started
 
 **Goal:** Second platform live. Three beta users lined up with access ready to go.
 
 **Tasks:**
-- [ ] `platforms/etsy.py` — Etsy API connector (OAuth PKCE flow, keyword-based competitor search)
-- [ ] Add Etsy to platform connection wizard
-- [ ] Etsy-specific product sync and competitor data mapping
-- [ ] `/dashboard/history` — full price change log with AI reasoning
-- [ ] `/dashboard/settings` — margin floor defaults, notification email preferences
-- [ ] Beta user onboarding checklist: Loom walkthrough video script prepared
-- [ ] Email notification on price change (transactional email via Resend or Postmark)
-- [ ] Identify 3 beta users from Facebook validation respondents (founder action)
-- [ ] Verify: Etsy full cycle works end-to-end; email notification arrives after price change
+- [ ] ❌ `platforms/etsy.py` — file exists but is an **empty stub (0 lines)**. Not implemented.
+- [ ] ❌ Add Etsy to platform connection wizard — blocked on above
+- [ ] ❌ Etsy-specific product sync and competitor data mapping — blocked on above
+- [x] `/dashboard/history` — full price change log with AI reasoning, built this session along with `GET /repricing/history` (paginated, JWT-gated, tested)
+- [x] `/dashboard/settings` — margin floor defaults page exists
+- [ ] ❌ Beta user onboarding checklist: Loom walkthrough video script — not started (founder action)
+- [ ] ❌ Email notification on price change — no Resend/Postmark/SMTP integration found anywhere in the codebase
+- [ ] ❌ Identify 3 beta users from Facebook validation respondents — not started (founder action)
+- [ ] Verify: Etsy full cycle works end-to-end; email notification arrives after price change — blocked, not built
 
-**Success criteria:** Two platforms operational. Three beta users identified and pre-briefed.
+**Note:** `platforms/ebay.py`, `platforms/shopify.py`, `platforms/woocommerce.py` are also empty stub files (0 lines each) — none of the Week 5+ connectors beyond Amazon exist yet. `platforms/mock.py` (156 lines) is the dev/test mock connector used for seeding test data.
+
+**Success criteria:** ❌ NOT MET — Only one platform (Amazon) operational. Zero beta users identified.
 
 ---
 
-### WEEK 6 — Beta Access + Hardening
+### WEEK 6 — Beta Access + Hardening  ⛔ NOT STARTED — and blocked on a Critical bug found in QA
 
 **Goal:** Beta users have access. Real usage exposes real bugs.
+
+**⛔ Pre-req before this week can safely start:** A live QA pass on 2026-07-01 found a **Critical, unfixed** bug: `db/client.py`'s `get_db()` singleton is shared process-wide, and `api/routers/auth.py`'s `/register`, `/login`, `/refresh` endpoints call `db.auth.sign_up()` / `sign_in_with_password()` / `refresh_session()` on that same shared client. This silently downgrades the client's effective DB role from `service_role` to whichever user most recently authenticated, for **every other concurrent or subsequent request**, with no error or log signal — just silently empty/wrong query results. Reproduced live. Under real beta traffic with multiple users logging in concurrently, this will cause random, unexplainable empty-data bugs indistinguishable from the original "products page shows 0 items" report. **Must be fixed before Week 6 beta access opens.**
 
 **Tasks:**
 - [ ] Provision beta user accounts (free access, 2-week window)
@@ -170,8 +190,8 @@
 - [ ] Fix top 3 issues surfaced by beta users
 - [ ] Supabase performance: review slow query log, add any missing indexes
 - [ ] Security audit: run pre-deployment checklist from `docs/SECURITY.md`
-- [ ] `/dashboard/products/[id]` — product detail page with price history chart
-- [ ] Stripe billing portal working end-to-end (upgrade/downgrade self-serve)
+- [x] `/dashboard/products/[id]` — product detail page exists (161 lines) — **missing the price history chart** called out in this task; currently a detail table only
+- [ ] Stripe billing portal working end-to-end (upgrade/downgrade self-serve) — blocked on Week 2 Stripe founder setup
 
 **Success criteria:** All 3 beta users have made at least one repricing cycle successfully. No CRITICAL-level errors in 48-hour window.
 

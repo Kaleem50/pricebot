@@ -12,6 +12,14 @@ Endpoints:
 All token handling is done by Supabase.  The returned ``access_token`` is a
 signed JWT that must be sent as ``Authorization: Bearer <token>`` on all
 protected requests.
+
+CRITICAL: register/login/refresh use ``get_auth_db()`` (a fresh, uncached
+client per request), NEVER ``get_db()`` (the shared service_role singleton).
+``auth.sign_up()``, ``auth.sign_in_with_password()``, and
+``auth.refresh_session()`` mutate session state on whatever client they're
+called on — calling them on the shared singleton silently downgrades it from
+service_role to that user's session for every other concurrent request. See
+``db/client.py`` module docstring for the full post-mortem (2026-07-01).
 """
 
 from __future__ import annotations
@@ -24,7 +32,7 @@ from supabase_auth.errors import AuthApiError
 from pydantic import BaseModel, EmailStr, Field
 from supabase import Client
 
-from api.dependencies import get_db
+from api.dependencies import get_auth_db
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +117,7 @@ class RegistrationResponse(BaseModel):
 @router.post("/register", response_model=RegistrationResponse, status_code=201)
 async def register(
     body: RegisterRequest,
-    db: Client = Depends(get_db),
+    auth_client: Client = Depends(get_auth_db),
 ) -> RegistrationResponse:
     """
     Create a new user account.
@@ -123,7 +131,8 @@ async def register(
 
     Args:
         body: Email and password for the new account.
-        db: Supabase client (injected via FastAPI DI).
+        auth_client: Fresh, request-scoped Supabase client (injected via FastAPI
+            DI) — NEVER the shared ``get_db()`` singleton. See module docstring.
 
     Returns:
         ``RegistrationResponse`` with either tokens (immediate signup) or a
@@ -134,7 +143,7 @@ async def register(
                            (e.g. email already in use, weak password).
     """
     try:
-        response = db.auth.sign_up({"email": body.email, "password": body.password})
+        response = auth_client.auth.sign_up({"email": body.email, "password": body.password})
     except AuthApiError as exc:
         logger.warning(
             "Registration failed",
@@ -183,7 +192,7 @@ async def register(
 @router.post("/login", response_model=AuthResponse)
 async def login(
     body: LoginRequest,
-    db: Client = Depends(get_db),
+    auth_client: Client = Depends(get_auth_db),
 ) -> AuthResponse:
     """
     Authenticate with email and password.
@@ -193,7 +202,8 @@ async def login(
 
     Args:
         body: Email and password credentials.
-        db: Supabase client (injected via FastAPI DI).
+        auth_client: Fresh, request-scoped Supabase client (injected via FastAPI
+            DI) — NEVER the shared ``get_db()`` singleton. See module docstring.
 
     Returns:
         ``AuthResponse`` with fresh access and refresh tokens.
@@ -202,7 +212,7 @@ async def login(
         HTTPException 401: If credentials are invalid.
     """
     try:
-        response = db.auth.sign_in_with_password(
+        response = auth_client.auth.sign_in_with_password(
             {"email": body.email, "password": body.password}
         )
     except AuthApiError:
@@ -234,7 +244,7 @@ async def login(
 @router.post("/refresh", response_model=AuthResponse)
 async def refresh(
     body: RefreshRequest,
-    db: Client = Depends(get_db),
+    auth_client: Client = Depends(get_auth_db),
 ) -> AuthResponse:
     """
     Exchange a refresh token for a new access token.
@@ -245,7 +255,8 @@ async def refresh(
 
     Args:
         body: A valid refresh token from a prior login or refresh call.
-        db: Supabase client (injected via FastAPI DI).
+        auth_client: Fresh, request-scoped Supabase client (injected via FastAPI
+            DI) — NEVER the shared ``get_db()`` singleton. See module docstring.
 
     Returns:
         ``AuthResponse`` with a new access token and rotated refresh token.
@@ -254,7 +265,7 @@ async def refresh(
         HTTPException 401: If the refresh token is invalid or expired.
     """
     try:
-        response = db.auth.refresh_session(body.refresh_token)
+        response = auth_client.auth.refresh_session(body.refresh_token)
     except AuthApiError as exc:
         logger.info("Token refresh failed", extra={"error": str(exc)})
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")

@@ -31,15 +31,17 @@ const selectCls =
 export default function ProductsPage() {
   const [productList, setProductList] = useState<ProductListItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [platform, setPlatform] = useState<Platform | ''>('')
   const [state, setState] = useState('')
 
   useEffect(() => {
     setLoading(true)
+    setError(null)
     productsApi
       .list({ platform: platform || undefined, state: state || undefined })
       .then(setProductList)
-      .catch(() => {})
+      .catch(() => setError('Failed to load products — please refresh or contact support.'))
       .finally(() => setLoading(false))
   }, [platform, state])
 
@@ -61,11 +63,15 @@ export default function ProductsPage() {
         </select>
       </div>
 
+      {error && (
+        <div className="rounded-lg bg-red-50 dark:bg-red-900/30 p-3 text-sm text-red-800 dark:text-red-300">{error}</div>
+      )}
+
       {loading ? (
         <div className="flex h-48 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
         </div>
-      ) : productList.length === 0 ? (
+      ) : error ? null : productList.length === 0 ? (
         <EmptyState
           title="No products yet"
           description="Connect your Amazon account to import your product catalog."

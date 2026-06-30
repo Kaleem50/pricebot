@@ -421,15 +421,22 @@ Blockers   : [anything the founder must do before building continues — or "Non
 
 ## 12. Current Build Status
 
+_Last verified 2026-07-01 via live QA pass + full pytest run (163/163 passing). Full detail in `docs/ROADMAP.md` §1._
+
 | Component | Status |
 |---|---|
 | `core/repricing_engine.py` | ✅ Built and tested |
 | `demo.py` | ✅ Built — tests Etsy, Amazon, eBay with sample data |
-| `requirements.txt` | ✅ Built |
-| `.env.example` | ✅ Built |
-| All `docs/*.md` files | ✅ Generated this session |
-| Everything else | ❌ Not yet built |
+| Week 1 — Foundation (DB, FastAPI, auth, rate limiter) | ✅ Complete |
+| Week 2 — Amazon connector + billing code | ✅ Complete — Stripe account setup still a founder action |
+| Week 3 — Worker pipeline (batch submit/poll/scheduler) | ✅ Complete |
+| Week 4 — Dashboard MVP + dark mode + password toggle | ✅ Complete |
+| Week 5 — `/dashboard/history`, `/dashboard/settings`, history API | ✅ Complete |
+| Week 5 — Etsy connector, email notifications, beta prep | ❌ Not built |
+| `platforms/ebay.py`, `shopify.py`, `woocommerce.py` | ❌ Empty stub files |
+| Weeks 6–8 | ⛔ Not started |
+| 🔴 **Critical bug** — shared `db/client.py` singleton corrupted by any `/auth/register`, `/auth/login`, or `/auth/refresh` call, silently breaking other users' concurrent queries | **Found 2026-07-01, unfixed — must fix before Week 6 beta access** |
 
-**Current active task:** _[Founder: update this line at each session start]_
+**Current active task:** Fix the shared-singleton DB contamination bug (see `docs/ROADMAP.md` Week 6 pre-req), then resume Week 5 (Etsy connector + email notifications) or proceed to Week 6 hardening.
 
 Refer to `docs/ROADMAP.md` for the full sequenced build queue.

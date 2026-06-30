@@ -22,7 +22,7 @@ os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 os.environ.setdefault("CREDENTIAL_ENCRYPTION_KEY", "a" * 64)
 
 from api.main import app  # noqa: E402
-from api.dependencies import get_db  # noqa: E402
+from api.dependencies import get_auth_db  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -74,7 +74,7 @@ class TestRegisterWithImmediateSignup:
 
         db_mock.auth.sign_up = MagicMock(return_value=response_obj)
 
-        app.dependency_overrides[get_db] = lambda: db_mock
+        app.dependency_overrides[get_auth_db] = lambda: db_mock
         try:
             client = TestClient(app)
             resp = client.post(
@@ -105,7 +105,7 @@ class TestRegisterWithImmediateSignup:
             )
         )
 
-        app.dependency_overrides[get_db] = lambda: db_mock
+        app.dependency_overrides[get_auth_db] = lambda: db_mock
         try:
             client = TestClient(app)
             resp = client.post(
@@ -130,7 +130,7 @@ class TestRegisterWithImmediateSignup:
             )
         )
 
-        app.dependency_overrides[get_db] = lambda: db_mock
+        app.dependency_overrides[get_auth_db] = lambda: db_mock
         try:
             client = TestClient(app)
             resp = client.post(
@@ -164,7 +164,7 @@ class TestRegisterWithEmailConfirmation:
 
         db_mock.auth.sign_up = MagicMock(return_value=response_obj)
 
-        app.dependency_overrides[get_db] = lambda: db_mock
+        app.dependency_overrides[get_auth_db] = lambda: db_mock
         try:
             client = TestClient(app)
             resp = client.post(
@@ -194,7 +194,7 @@ class TestRegisterWithEmailConfirmation:
 
         db_mock.auth.sign_up = MagicMock(return_value=response_obj)
 
-        app.dependency_overrides[get_db] = lambda: db_mock
+        app.dependency_overrides[get_auth_db] = lambda: db_mock
         try:
             client = TestClient(app)
             resp = client.post(
@@ -228,7 +228,7 @@ class TestRegisterEdgeCases:
 
         db_mock.auth.sign_up = MagicMock(return_value=response_obj)
 
-        app.dependency_overrides[get_db] = lambda: db_mock
+        app.dependency_overrides[get_auth_db] = lambda: db_mock
         try:
             client = TestClient(app)
             resp = client.post(
@@ -245,7 +245,7 @@ class TestRegisterEdgeCases:
         db_mock = _mock_db()
         db_mock.auth.sign_up = MagicMock(side_effect=RuntimeError("DB connection lost"))
 
-        app.dependency_overrides[get_db] = lambda: db_mock
+        app.dependency_overrides[get_auth_db] = lambda: db_mock
         try:
             client = TestClient(app)
             resp = client.post(
@@ -261,7 +261,7 @@ class TestRegisterEdgeCases:
     def test_invalid_email_format_returns_422(self):
         """Pydantic validation fails on malformed email."""
         db_mock = _mock_db()
-        app.dependency_overrides[get_db] = lambda: db_mock
+        app.dependency_overrides[get_auth_db] = lambda: db_mock
         try:
             client = TestClient(app)
             resp = client.post(
@@ -276,7 +276,7 @@ class TestRegisterEdgeCases:
     def test_missing_password_returns_422(self):
         """Missing password → Pydantic validation fails."""
         db_mock = _mock_db()
-        app.dependency_overrides[get_db] = lambda: db_mock
+        app.dependency_overrides[get_auth_db] = lambda: db_mock
         try:
             client = TestClient(app)
             resp = client.post(

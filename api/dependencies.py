@@ -26,6 +26,7 @@ from fastapi import Depends, Header, HTTPException
 from pydantic import BaseModel
 from supabase import Client
 
+from db.client import get_auth_client as _get_auth_client
 from db.client import get_db as _get_db_singleton
 
 logger = logging.getLogger(__name__)
@@ -111,10 +112,31 @@ def get_db() -> Client:
     Thin wrapper around ``db.client.get_db()`` to allow dependency injection
     in route handlers.
 
+    Never call ``auth.sign_up()``, ``auth.sign_in_with_password()``, or
+    ``auth.refresh_session()`` on the client this returns — use
+    ``get_auth_db()`` instead. See ``db/client.py`` module docstring for why.
+
     Returns:
         Supabase ``Client`` instance.
     """
     return _get_db_singleton()
+
+
+def get_auth_db() -> Client:
+    """
+    FastAPI dependency that returns a fresh, request-scoped Supabase client
+    for end-user auth operations only: ``sign_up()``, ``sign_in_with_password()``,
+    ``refresh_session()``.
+
+    Thin wrapper around ``db.client.get_auth_client()``. Deliberately never
+    the same instance as ``get_db()`` — see ``db/client.py`` module docstring
+    for the Critical bug this separation fixes (shared-singleton session
+    contamination across concurrent requests).
+
+    Returns:
+        A new Supabase ``Client`` instance, not cached.
+    """
+    return _get_auth_client()
 
 
 async def get_current_user(
@@ -150,13 +172,15 @@ async def get_current_user(
 
     token = authorization[len("Bearer "):]
 
-    # Use Supabase's built-in auth.get_user() to verify ES256 JWT correctly
+    # Use Supabase's built-in auth.get_user() to verify ES256 JWT correctly.
+    # Returns UserResponse with a .user attribute — access .user.id, not .id.
     try:
-        user = db.auth.get_user(token)
+        user_response = db.auth.get_user(token)
     except Exception as exc:
         logger.warning("JWT validation failed", extra={"error": str(exc)})
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
+    user = getattr(user_response, "user", user_response)
     if not user:
         logger.warning("auth.get_user() returned no user")
         raise HTTPException(status_code=401, detail="Token verification failed")

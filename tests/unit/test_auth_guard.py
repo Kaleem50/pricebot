@@ -55,15 +55,34 @@ def _make_token(payload: dict | None = None) -> str:
     return jwt.encode(payload or _VALID_PAYLOAD, _JWT_SECRET, algorithm="HS256")
 
 
+def _make_user_response(
+    user_id: str = _VALID_USER_ID,
+    email: str = _VALID_EMAIL,
+) -> MagicMock:
+    """
+    Simulate a Supabase UserResponse wrapping an inner User.
+
+    Uses ``spec`` to prevent MagicMock from auto-creating attributes:
+      - outer mock only exposes ``.user`` (matches real UserResponse)
+      - inner mock only exposes ``.id`` and ``.email``
+
+    This ensures ``getattr(response, "user", response)`` in
+    ``get_current_user()`` correctly resolves to the inner user object.
+    """
+    mock_user = MagicMock(spec=["id", "email"])
+    mock_user.id = user_id
+    mock_user.email = email
+    mock_response = MagicMock(spec=["user"])
+    mock_response.user = mock_user
+    return mock_response
+
+
 def _mock_db_with_subscription(tier: str = "starter", status: str = "active") -> MagicMock:
     """Return a mock Supabase client with auth.get_user() and subscription lookup."""
     mock_db = MagicMock()
 
-    # Mock auth.get_user() to return a valid user object
-    mock_user = MagicMock()
-    mock_user.id = _VALID_USER_ID
-    mock_user.email = _VALID_EMAIL
-    mock_db.auth.get_user.return_value = mock_user
+    # auth.get_user() returns a UserResponse wrapping a User object
+    mock_db.auth.get_user.return_value = _make_user_response()
 
     # Mock table queries for subscription lookup
     (
@@ -178,11 +197,7 @@ class TestGetCurrentUser:
     def test_no_subscription_defaults_to_starter(self) -> None:
         """New user with no subscription row is allowed and defaults to STARTER tier."""
         mock_db = _mock_db_no_subscription()
-        # Mock auth.get_user() even though subscription is empty
-        mock_user = MagicMock()
-        mock_user.id = _VALID_USER_ID
-        mock_user.email = _VALID_EMAIL
-        mock_db.auth.get_user.return_value = mock_user
+        mock_db.auth.get_user.return_value = _make_user_response()
 
         app, client = _make_auth_app(mock_db)
 
@@ -198,11 +213,7 @@ class TestGetCurrentUser:
         """
         controlled_user_id = "real-user-id-from-token"
         mock_db = _mock_db_with_subscription()
-        # Override the user.id to the controlled user ID
-        mock_user = MagicMock()
-        mock_user.id = controlled_user_id
-        mock_user.email = _VALID_EMAIL
-        mock_db.auth.get_user.return_value = mock_user
+        mock_db.auth.get_user.return_value = _make_user_response(user_id=controlled_user_id)
 
         app, client = _make_auth_app(mock_db)
 
