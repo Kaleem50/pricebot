@@ -19,7 +19,6 @@ from pydantic import BaseModel
 import jwt
 
 from api.dependencies import Tier, get_db
-from core.repricing_engine import RepricingEngine
 from workers.batch_submitter import BatchSubmitter
 from supabase import Client
 
@@ -104,8 +103,7 @@ async def trigger_repricing_cycle(
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY not configured")
-        engine = RepricingEngine(api_key)
-        submitter = BatchSubmitter(engine)
+        submitter = BatchSubmitter(anthropic_api_key=api_key)
         result = await submitter.submit_for_user(user_id, db, tier)
     except Exception as exc:
         logger.error(
