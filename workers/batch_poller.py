@@ -99,7 +99,7 @@ class BatchPoller:
         try:
             submitted_result = (
                 db.table("repricing_jobs")
-                .select("id, user_id, product_id, batch_id, platform")
+                .select("id, user_id, product_id, batch_id, platform, anthropic_custom_id")
                 .eq("state", "BATCH_SUBMITTED")
                 .execute()
             )
@@ -169,7 +169,7 @@ class BatchPoller:
                 products_result = (
                     db.table("products")
                     .select(
-                        "id, user_id, platform_product_id, title, current_price, cost, min_margin_floor, platform, platform_sku, platform_context, metadata"
+                        "id, user_id, platform_product_id, title, current_price, cost, min_margin_floor, platform, platform_sku"
                     )
                     .in_("id", product_ids)
                     .execute()
@@ -200,15 +200,24 @@ class BatchPoller:
                     cost=float(row.get("cost") or 0),
                     min_margin_floor=float(row.get("min_margin_floor") or 0),
                     user_id=row["user_id"],
-                    platform_context=row.get("platform_context") or {},
-                    metadata=row.get("metadata") or {},
+                    platform_context={},
+                    metadata={},
                 )
+
+            # Build custom_id → product_id mapping from persisted anthropic_custom_id values.
+            # This is the inverse of the map created by submit_batch() and stored per-job.
+            custom_id_to_product_id: dict[str, str] = {
+                job["anthropic_custom_id"]: job["product_id"]
+                for job in batch_jobs
+                if job.get("anthropic_custom_id")
+            }
 
             # Retrieve and parse batch results
             try:
                 recommendations = self._engine.retrieve_batch_results(
                     batch_id=batch_id,
                     products_by_id=my_products_by_id,
+                    custom_id_to_product_id=custom_id_to_product_id,
                 )
             except Exception as exc:
                 logger.error(
@@ -219,6 +228,8 @@ class BatchPoller:
 
             # Process each recommendation
             rec_by_product_id = {rec.product_id: rec for rec in recommendations}
+            # Track which products succeed so we can mark the rest FAILED in products table.
+            succeeded_product_ids: set[str] = set()
 
             for job in batch_jobs:
                 product_id = job["product_id"]
@@ -519,11 +530,14 @@ class BatchPoller:
                         },
                     )
 
-                # Update products table
+                # Update products table: apply new price and reset state to IDLE
+                # so the scheduler picks this product up in the next cycle.
                 try:
                     db.table("products").update(
                         {
                             "current_price": recommendation.final_price,
+                            "state": "IDLE",
+                            "last_repriced_at": datetime.now(timezone.utc).isoformat(),
                             "last_synced_at": datetime.now(timezone.utc).isoformat(),
                             "updated_at": datetime.now(timezone.utc).isoformat(),
                         }
@@ -553,7 +567,35 @@ class BatchPoller:
                         extra={"job_id": job_id, "error": str(exc)},
                     )
 
+                succeeded_product_ids.add(product_id)
                 succeeded += 1
+
+            # Mark products that did NOT succeed as FAILED so the recovery worker
+            # can reset them to IDLE and the scheduler won't ignore them forever.
+            failed_product_ids = (
+                {j["product_id"] for j in batch_jobs} - succeeded_product_ids
+            )
+            for failed_pid in failed_product_ids:
+                failed_job_user_id = next(
+                    (j["user_id"] for j in batch_jobs if j["product_id"] == failed_pid),
+                    None,
+                )
+                try:
+                    db.table("products").update(
+                        {
+                            "state": "FAILED",
+                            "updated_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                    ).eq("id", failed_pid).eq("user_id", failed_job_user_id).execute()
+                except Exception as exc:
+                    logger.error(
+                        "Failed to set products.state=FAILED for failed job",
+                        extra={
+                            "product_id": failed_pid,
+                            "user_id": failed_job_user_id,
+                            "error": str(exc),
+                        },
+                    )
 
             # Record usage event for this batch
             try:

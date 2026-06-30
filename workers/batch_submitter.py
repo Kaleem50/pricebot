@@ -352,27 +352,69 @@ class BatchSubmitter:
             )
             raise
 
-        # Step 5: Update repricing_jobs state to BATCH_SUBMITTED
+        # Step 5: INSERT a repricing_job row for each product and flip products.state.
+        # repricing_jobs rows do NOT exist before this point — the submitter creates them.
+        # Per-product loop is required so each row gets its own anthropic_custom_id token.
         logger.info(
-            "Updating repricing jobs to BATCH_SUBMITTED",
+            "Creating repricing_jobs rows and updating product states to BATCH_SUBMITTED",
             extra={"user_id": user_id, "batch_id": batch_result.batch_id},
         )
 
-        try:
-            db.table("repricing_jobs").update(
-                {
-                    "state": "BATCH_SUBMITTED",
-                    "batch_id": batch_result.batch_id,
-                    "submitted_at": datetime.now(timezone.utc).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ).eq("user_id", user_id).eq("state", "IDLE").execute()
-        except Exception as exc:
-            logger.error(
-                "Failed to update repricing jobs",
-                extra={"user_id": user_id, "batch_id": batch_result.batch_id, "error": str(exc)},
-            )
-            raise
+        # Invert custom_id_map (custom_id → product_id) to product_id → custom_id
+        # so we can look up the right token for each product in one pass.
+        product_id_to_custom_id = {v: k for k, v in batch_result.custom_id_map.items()}
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        for product, _competitors in products_with_competitors:
+            custom_id = product_id_to_custom_id.get(product.product_id)
+
+            # INSERT new repricing_job row (the row does not exist yet).
+            try:
+                db.table("repricing_jobs").insert(
+                    {
+                        "user_id": user_id,
+                        "product_id": product.product_id,
+                        "platform": product.platform,
+                        "state": "BATCH_SUBMITTED",
+                        "batch_id": batch_result.batch_id,
+                        "anthropic_custom_id": custom_id,
+                        "submitted_at": now_iso,
+                        "scheduled_at": now_iso,
+                        "created_at": now_iso,
+                        "updated_at": now_iso,
+                    }
+                ).execute()
+            except Exception as exc:
+                logger.error(
+                    "Failed to insert repricing_job for product",
+                    extra={
+                        "user_id": user_id,
+                        "product_id": product.product_id,
+                        "batch_id": batch_result.batch_id,
+                        "error": str(exc),
+                    },
+                )
+                raise
+
+            # UPDATE products.state so the scheduler won't re-pick this product
+            # before the batch result arrives.
+            try:
+                db.table("products").update(
+                    {
+                        "state": "BATCH_SUBMITTED",
+                        "updated_at": now_iso,
+                    }
+                ).eq("id", product.product_id).eq("user_id", user_id).execute()
+            except Exception as exc:
+                logger.error(
+                    "Failed to update products.state to BATCH_SUBMITTED",
+                    extra={
+                        "user_id": user_id,
+                        "product_id": product.product_id,
+                        "error": str(exc),
+                    },
+                )
+                raise
 
         # Step 6: Record usage event
         logger.info(

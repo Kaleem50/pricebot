@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import secrets
 import time
 from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
@@ -430,6 +431,7 @@ class BatchSubmitResult(BaseModel):
     Return value of RepricingEngine.submit_batch().
 
     Contains the Anthropic batch ID needed by the poller to retrieve results,
+    the custom_id mapping needed to persist per-product lookup keys,
     and summary statistics for logging and cost tracking.
     """
 
@@ -443,6 +445,14 @@ class BatchSubmitResult(BaseModel):
     estimated_input_tokens: int = Field(
         default=0,
         description="Rough token estimate for cost tracking (before cache discount).",
+    )
+    custom_id_map: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Maps each Anthropic custom_id (8 hex chars, ≤64 chars) to its product_id. "
+            "Caller must persist this to repricing_jobs.anthropic_custom_id so the poller "
+            "can reconstruct the mapping when retrieve_batch_results() is called."
+        ),
     )
 
     model_config = {"frozen": True}
@@ -809,9 +819,12 @@ class RepricingEngine:
         All products for a given user are submitted in a single batch to
         minimise API overhead and maximise prompt cache hit rate.
 
-        The ``custom_id`` for each request is ``{user_id}:{product_id}``,
-        which allows the poller to match results back to products without
-        any additional DB lookups.
+        The ``custom_id`` for each request is an 8-character hex token
+        (e.g. ``"a3f9c12b"``), well within Anthropic's 64-character limit.
+        The mapping from custom_id → product_id is returned in
+        ``BatchSubmitResult.custom_id_map`` and must be persisted to
+        ``repricing_jobs.anthropic_custom_id`` by the caller so the poller
+        can reconstruct it when calling ``retrieve_batch_results()``.
 
         Args:
             user_id:                    Supabase user ID — used as batch owner.
@@ -832,11 +845,17 @@ class RepricingEngine:
 
         system_block = self._system_prompt_block()
         requests: list[BatchRequest] = []
+        # Maps 8-char hex custom_id → product_id for result lookup after batch completes.
+        # Returned to caller so it can persist to repricing_jobs.anthropic_custom_id.
+        custom_id_map: dict[str, str] = {}
         estimated_tokens = 0
 
         for product, competitors in products_with_competitors:
             user_message = _build_user_message(product, competitors)
-            custom_id = f"{user_id}:{product.product_id}"
+            # 8 hex chars (4 bytes) = 16^8 = 4 billion possible values; collision
+            # probability within a single batch (max ~10,000 products) is negligible.
+            custom_id = secrets.token_hex(4)
+            custom_id_map[custom_id] = product.product_id
 
             requests.append(
                 BatchRequest(
@@ -884,6 +903,7 @@ class RepricingEngine:
             request_count=len(requests),
             user_id=user_id,
             estimated_input_tokens=estimated_tokens,
+            custom_id_map=custom_id_map,
         )
 
     # ------------------------------------------------------------------
@@ -933,6 +953,7 @@ class RepricingEngine:
         self,
         batch_id: str,
         products_by_id: dict[str, MyProduct],
+        custom_id_to_product_id: dict[str, str],
     ) -> list[RepricingRecommendation]:
         """
         Stream completed batch results and return parsed RepricingRecommendations.
@@ -951,10 +972,12 @@ class RepricingEngine:
             (meaning they errored, timed out, or failed a guardrail).
 
         Args:
-            batch_id:       Anthropic batch ID to retrieve results for.
-            products_by_id: Dict mapping product_id → MyProduct.
-                            Used to look up product data for guardrail checks and
-                            to map custom_id back to the original product.
+            batch_id:                Anthropic batch ID to retrieve results for.
+            products_by_id:          Dict mapping product_id → MyProduct.
+                                     Used to look up product data for guardrail checks.
+            custom_id_to_product_id: Dict mapping Anthropic custom_id → product_id.
+                                     Built by the poller from repricing_jobs.anthropic_custom_id
+                                     (persisted there by the submitter via BatchSubmitResult.custom_id_map).
 
         Returns:
             List of RepricingRecommendation — one per successfully parsed result.
@@ -971,17 +994,15 @@ class RepricingEngine:
         )
 
         for result in self._client.messages.batches.results(batch_id):
-            # custom_id format: "{user_id}:{product_id}"
-            parts = result.custom_id.split(":", 1)
-            if len(parts) != 2:
+            product_id = custom_id_to_product_id.get(result.custom_id)
+            if product_id is None:
                 logger.critical(
-                    "Batch result has malformed custom_id — skipping",
+                    "Batch result has unrecognised custom_id — skipping",
                     extra={"batch_id": batch_id, "custom_id": result.custom_id},
                 )
                 failed += 1
                 continue
 
-            _user_id, product_id = parts
             product = products_by_id.get(product_id)
 
             if product is None:
