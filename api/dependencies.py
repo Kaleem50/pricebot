@@ -127,10 +127,10 @@ async def get_current_user(
     """
     Validate the Bearer JWT and return the authenticated user.
 
-    Extracts the JWT from the ``Authorization: Bearer <token>`` header,
-    validates the signature using ``JWT_SECRET``, and reads ``user_id`` from
-    ``payload['sub']``.  Then queries the ``subscriptions`` table to get the
-    user's active tier.
+    Uses Supabase's built-in auth.get_user() which correctly verifies ES256
+    JWT signatures against Supabase's public keys.  Extracts user_id and email
+    from the verified session. Then queries the subscriptions table to get
+    the user's active tier.
 
     Args:
         authorization: Raw ``Authorization`` header value.
@@ -153,31 +153,19 @@ async def get_current_user(
 
     token = authorization[len("Bearer "):]
 
-    jwt_secret = os.environ.get("JWT_SECRET", "")
-    if not jwt_secret:
-        logger.critical("JWT_SECRET environment variable is not set")
-        raise HTTPException(status_code=500, detail="Authentication service misconfigured")
-
+    # Use Supabase's built-in auth.get_user() to verify ES256 JWT correctly
     try:
-        payload: dict = jwt.decode(
-            token,
-            jwt_secret,
-            algorithms=["HS256"],
-            audience="authenticated",
-        )
-    except ExpiredSignatureError:
-        logger.info("JWT validation failed: token expired")
-        raise HTTPException(status_code=401, detail="Token expired")
-    except InvalidTokenError as exc:
+        user = db.auth.get_user(token)
+    except Exception as exc:
         logger.warning("JWT validation failed", extra={"error": str(exc)})
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    user_id: str | None = payload.get("sub")
-    if not user_id:
-        logger.warning("JWT payload missing 'sub' claim", extra={"payload_keys": list(payload.keys())})
-        raise HTTPException(status_code=401, detail="Token is missing user identity claim")
+    if not user:
+        logger.warning("auth.get_user() returned no user")
+        raise HTTPException(status_code=401, detail="Token verification failed")
 
-    email: str = payload.get("email", "")
+    user_id: str = user.id
+    email: str = user.email or ""
 
     try:
         result = (
