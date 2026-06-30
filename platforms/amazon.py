@@ -51,6 +51,9 @@ logger = logging.getLogger(__name__)
 _LWA_TOKEN_URL = "https://api.amazon.com/auth/o2/token"
 _SP_API_BASE = "https://sellingpartnerapi-na.amazon.com"
 
+# Amazon SP-API endpoints — sandbox
+_SP_API_BASE_SANDBOX = "https://sellingpartnerapi-na.amazon.com/sandbox"
+
 # Max ASINs per competitive pricing batch (Amazon hard limit: 20)
 _PRICING_BATCH_SIZE = 20
 
@@ -69,6 +72,12 @@ class AmazonConnector(BasePlatformConnector):
     fetches competitor prices via the Competitive Pricing API (batched),
     and applies prices via a PATCH to the Listings Items API.
 
+    Sandbox Mode (for testing without production SP-API approval):
+        Include "sandbox": true in credentials to route all API calls to the
+        sandbox endpoint (sellingpartnerapi-na.amazon.com/sandbox) instead of
+        production.  Test credentials work in sandbox without requiring
+        production SP-API approval.
+
     Token caching:
         Access tokens are cached class-wide (keyed by user_id) so that
         multiple concurrent calls within the same repricing cycle share
@@ -76,12 +85,26 @@ class AmazonConnector(BasePlatformConnector):
 
     Args:
         credentials: Must include keys: refresh_token, client_id, client_secret,
-                     marketplace_id, merchant_id.
+                     marketplace_id, merchant_id.  Optional: "sandbox" (bool, default False).
         user_id:     Supabase user ID — used as the token cache key.
     """
 
     # Class-level LWA token cache: user_id → (access_token, expires_at_epoch)
     _token_cache: ClassVar[dict[str, tuple[str, float]]] = {}
+
+    # ------------------------------------------------------------------
+    # Endpoint selection (production vs. sandbox)
+    # ------------------------------------------------------------------
+
+    def _get_sp_api_base(self) -> str:
+        """Return SP-API base URL, using sandbox if credentials specify it."""
+        if self._credentials.get("sandbox", False):
+            logger.info(
+                "Using Amazon SP-API sandbox environment",
+                extra={"user_id": self.user_id},
+            )
+            return _SP_API_BASE_SANDBOX
+        return _SP_API_BASE
 
     # ------------------------------------------------------------------
     # Token management
@@ -184,7 +207,7 @@ class AmazonConnector(BasePlatformConnector):
 
         merchant_id = self._credentials["merchant_id"]
         marketplace_id = self._credentials["marketplace_id"]
-        url = f"{_SP_API_BASE}/listings/2021-08-01/items/{merchant_id}"
+        url = f"{self._get_sp_api_base()}/listings/2021-08-01/items/{merchant_id}"
         params = {
             "marketplaceIds": marketplace_id,
             "pageSize": 1,
@@ -241,7 +264,7 @@ class AmazonConnector(BasePlatformConnector):
         token = await self._get_access_token()
         merchant_id = self._credentials["merchant_id"]
         marketplace_id = self._credentials["marketplace_id"]
-        url = f"{_SP_API_BASE}/listings/2021-08-01/items/{merchant_id}"
+        url = f"{self._get_sp_api_base()}/listings/2021-08-01/items/{merchant_id}"
         products: list[MyProduct] = []
         next_page_token: str | None = None
 
@@ -382,7 +405,7 @@ class AmazonConnector(BasePlatformConnector):
         asin = product.platform_product_id
         marketplace_id = self._credentials["marketplace_id"]
 
-        url = f"{_SP_API_BASE}/products/pricing/2022-05-01/competitivePrice"
+        url = f"{self._get_sp_api_base()}/products/pricing/2022-05-01/competitivePrice"
         params = {
             "marketplaceId": marketplace_id,
             "Asins": asin,
@@ -539,7 +562,7 @@ class AmazonConnector(BasePlatformConnector):
         }
         asins_param = ",".join(asin_to_product.keys())
 
-        url = f"{_SP_API_BASE}/products/pricing/2022-05-01/competitivePrice"
+        url = f"{self._get_sp_api_base()}/products/pricing/2022-05-01/competitivePrice"
         params = {
             "marketplaceId": marketplace_id,
             "Asins": asins_param,
@@ -777,7 +800,7 @@ class AmazonConnector(BasePlatformConnector):
         marketplace_id = self._credentials["marketplace_id"]
         sku = product.platform_sku
 
-        url = f"{_SP_API_BASE}/listings/2021-08-01/items/{merchant_id}/{sku}"
+        url = f"{self._get_sp_api_base()}/listings/2021-08-01/items/{merchant_id}/{sku}"
         params = {"marketplaceIds": marketplace_id}
 
         body = {
