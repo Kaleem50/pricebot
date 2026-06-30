@@ -18,9 +18,9 @@
 
 ## 1. What Is Done
 
-**Last verified:** 2026-07-01, via live QA pass (curl against running API + direct DB queries) + full pytest run (163/163 passing). See per-week sections below for detail.
+**Last verified:** 2026-07-01, via live QA pass + full pytest run. Critical singleton bug found and fixed same session — 165/165 passing post-fix. See per-week sections below for detail.
 
-**Overall: Weeks 1–4 complete and verified. Week 5 half-done (dashboard side only). Weeks 6–8 not started — and Week 6 has a Critical pre-req bug to fix first (see Week 6 section).**
+**Overall: Weeks 1–4 complete and verified. Week 5 half-done (dashboard side only). Weeks 6–8 not started.**
 
 | Item | Status |
 |---|---|
@@ -42,7 +42,7 @@
 | Week 5 — `/dashboard/history`, `/dashboard/settings`, repricing history API | ✅ Complete |
 | Week 5 — Email notifications, beta user list | ❌ Not started |
 | Week 6–8 | ⛔ Not started |
-| **Critical bug: shared DB-client singleton contaminated by login/register/refresh** | 🔴 **Found 2026-07-01, not yet fixed — blocks Week 6 beta access** |
+| **Critical bug: shared DB-client singleton contaminated by login/register/refresh** | ✅ **Fixed 2026-07-01** — `get_auth_client()` added, auth.py uses `get_auth_db()`, regression test in `tests/integration/` |
 
 ---
 
@@ -176,11 +176,11 @@
 
 ---
 
-### WEEK 6 — Beta Access + Hardening  ⛔ NOT STARTED — and blocked on a Critical bug found in QA
+### WEEK 6 — Beta Access + Hardening  ⛔ NOT STARTED
 
 **Goal:** Beta users have access. Real usage exposes real bugs.
 
-**⛔ Pre-req before this week can safely start:** A live QA pass on 2026-07-01 found a **Critical, unfixed** bug: `db/client.py`'s `get_db()` singleton is shared process-wide, and `api/routers/auth.py`'s `/register`, `/login`, `/refresh` endpoints call `db.auth.sign_up()` / `sign_in_with_password()` / `refresh_session()` on that same shared client. This silently downgrades the client's effective DB role from `service_role` to whichever user most recently authenticated, for **every other concurrent or subsequent request**, with no error or log signal — just silently empty/wrong query results. Reproduced live. Under real beta traffic with multiple users logging in concurrently, this will cause random, unexplainable empty-data bugs indistinguishable from the original "products page shows 0 items" report. **Must be fixed before Week 6 beta access opens.**
+**Pre-req resolved (2026-07-01):** The Critical singleton contamination bug has been fixed. `db/client.py` now exports `get_auth_client()` — a fresh, uncached `create_client(url, anon_key)` per call — and `api/routers/auth.py` uses it via `get_auth_db()` for all three session-establishing operations. `get_db()`'s service_role singleton is never touched by auth flows. Live test confirmed: User B register + login + refresh → User A's product count unchanged (4/4). Regression test: `tests/integration/test_singleton_isolation.py`. 165/165 passing.
 
 **Tasks:**
 - [ ] Provision beta user accounts (free access, 2-week window)

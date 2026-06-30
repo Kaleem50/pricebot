@@ -25,7 +25,22 @@
       "Bash(npm install *)",
       "Bash(python3 -m pytest /home/kaleem/Desktop/PriceBot/tests/unit/ -q --tb=no)",
       "Bash(python3 -m pytest tests/unit/test_repricing.py -v)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(python3 -m pytest tests/unit/test_auth_guard.py -x -q)",
+      "Bash(python3 -m pytest tests/unit/test_products.py -v)",
+      "Bash(python3 -)",
+      "Bash(python3 -c \"import requests; print\\('ok'\\)\")",
+      "Bash(python3 -u /tmp/claude-1000/-home-kaleem-Desktop-PriceBot/ae528566-0251-4878-9067-5433a84ba399/scratchpad/qa_harness.py)",
+      "Bash(nohup uvicorn api.main:app --reload --port 8000 --host 0.0.0.0)",
+      "Bash(disown)",
+      "Bash(pkill -f \"uvicorn api.main:app\")",
+      "Bash(uvicorn api.main:app --reload --port 8000 --host 0.0.0.0)",
+      "Bash(python3 -u /tmp/claude-1000/-home-kaleem-Desktop-PriceBot/ae528566-0251-4878-9067-5433a84ba399/scratchpad/qa_part2.py)",
+      "Bash(python3 -u /tmp/claude-1000/-home-kaleem-Desktop-PriceBot/ae528566-0251-4878-9067-5433a84ba399/scratchpad/qa_part3_auth.py)",
+      "Bash(python3 -u -)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(python3 -m pytest tests/integration/test_singleton_isolation.py -v -s)",
+      "Bash(python3 -m pytest tests/integration/test_singleton_isolation.py::TestSingletonIsolation::test_register_then_login_does_not_break_other_users_product_queries -v)"
     ]
   }
 }

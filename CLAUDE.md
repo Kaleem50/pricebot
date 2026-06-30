@@ -435,8 +435,8 @@ _Last verified 2026-07-01 via live QA pass + full pytest run (163/163 passing). 
 | Week 5 — Etsy connector, email notifications, beta prep | ❌ Not built |
 | `platforms/ebay.py`, `shopify.py`, `woocommerce.py` | ❌ Empty stub files |
 | Weeks 6–8 | ⛔ Not started |
-| 🔴 **Critical bug** — shared `db/client.py` singleton corrupted by any `/auth/register`, `/auth/login`, or `/auth/refresh` call, silently breaking other users' concurrent queries | **Found 2026-07-01, unfixed — must fix before Week 6 beta access** |
+| 🔴 **Critical bug** — shared `db/client.py` singleton corrupted by any `/auth/register`, `/auth/login`, or `/auth/refresh` call, silently breaking other users' concurrent queries | ✅ **Fixed 2026-07-01** — `get_auth_client()` + `get_auth_db()` separation, regression test in `tests/integration/` |
 
-**Current active task:** Fix the shared-singleton DB contamination bug (see `docs/ROADMAP.md` Week 6 pre-req), then resume Week 5 (Etsy connector + email notifications) or proceed to Week 6 hardening.
+**Current active task:** Week 5 remaining items (Etsy connector, email notifications) or Week 6 hardening (beta access, Stripe setup, product detail price-history chart).
 
 Refer to `docs/ROADMAP.md` for the full sequenced build queue.
