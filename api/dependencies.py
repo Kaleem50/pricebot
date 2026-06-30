@@ -20,12 +20,9 @@ Security constraints (SECURITY.md §2):
 from __future__ import annotations
 
 import logging
-import os
 from enum import IntEnum
 
-import jwt
 from fastapi import Depends, Header, HTTPException
-from jwt import ExpiredSignatureError, InvalidTokenError
 from pydantic import BaseModel
 from supabase import Client
 

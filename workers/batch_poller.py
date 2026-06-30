@@ -38,7 +38,7 @@ from supabase import Client
 
 from api.dependencies import Tier
 from core.crypto import decrypt_credential
-from core.repricing_engine import RepricingEngine, RepricingJobState
+from core.repricing_engine import RepricingEngine
 from platforms import get_connector
 
 logger = logging.getLogger(__name__)
@@ -163,7 +163,6 @@ class BatchPoller:
             batches_completed += 1
 
             # Fetch products for guardrail checks
-            job_ids = [j["id"] for j in batch_jobs]
             product_ids = [j["product_id"] for j in batch_jobs]
             try:
                 products_result = (

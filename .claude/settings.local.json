@@ -21,7 +21,11 @@
       "Bash(git commit -m 'fix\\(batch_submitter\\): correct product query and handle async methods *)",
       "Bash(python3 -m pytest tests/unit/ -q)",
       "Bash(grep -v \"^$\")",
-      "Bash(PGPASSWORD='6dg6i0fK7kNT8NOc' psql \"postgresql://postgres:6dg6i0fK7kNT8NOc@db.nacuouuiligdpurmzwom.supabase.co:5432/postgres\" -c \"SELECT id, title, state FROM products WHERE user_id = '4eb93e47-979c-4cab-814e-e25bf275524b' ORDER BY title;\")"
+      "Bash(PGPASSWORD='6dg6i0fK7kNT8NOc' psql \"postgresql://postgres:6dg6i0fK7kNT8NOc@db.nacuouuiligdpurmzwom.supabase.co:5432/postgres\" -c \"SELECT id, title, state FROM products WHERE user_id = '4eb93e47-979c-4cab-814e-e25bf275524b' ORDER BY title;\")",
+      "Bash(npm install *)",
+      "Bash(python3 -m pytest /home/kaleem/Desktop/PriceBot/tests/unit/ -q --tb=no)",
+      "Bash(python3 -m pytest tests/unit/test_repricing.py -v)",
+      "Bash(npm run *)"
     ]
   }
 }

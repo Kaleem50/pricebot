@@ -16,7 +16,6 @@ All methods return immediately without I/O or real API calls.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from core.repricing_engine import CompetitorProduct, MyProduct
 from platforms.base import BasePlatformConnector

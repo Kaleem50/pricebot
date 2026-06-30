@@ -53,11 +53,11 @@ if _ENVIRONMENT == "production" and _MOCK_MODE:
         "Mock connector must only be used for testing."
     )
 
-from api.dependencies import Tier
-from db.client import get_db
-from workers.batch_poller import BatchPoller
-from workers.batch_submitter import BatchSubmitter
-from workers.stale_job_recovery import StaleJobRecovery
+from api.dependencies import Tier  # noqa: E402
+from db.client import get_db  # noqa: E402
+from workers.batch_poller import BatchPoller  # noqa: E402
+from workers.batch_submitter import BatchSubmitter  # noqa: E402
+from workers.stale_job_recovery import StaleJobRecovery  # noqa: E402
 
 # Thread lock to ensure only one submission cycle runs at a time
 _submission_lock = threading.Lock()

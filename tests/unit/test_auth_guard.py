@@ -170,9 +170,7 @@ class TestGetCurrentUser:
         mock_db = _mock_db_with_subscription(tier="starter", status="canceled")
         app, client = _make_auth_app(mock_db)
 
-        with patch.dict(os.environ, {"JWT_SECRET": _JWT_SECRET}):
-            with patch("api.dependencies.jwt.decode", return_value={**_VALID_PAYLOAD}):
-                response = client.get("/me", headers={"Authorization": "Bearer tok"})
+        response = client.get("/me", headers={"Authorization": "Bearer tok"})
 
         assert response.status_code == 403
         assert "inactive" in response.json()["detail"].lower()
@@ -233,9 +231,7 @@ class TestGetCurrentUser:
         mock_db = _mock_db_with_subscription(tier="growth", status="past_due")
         app, client = _make_auth_app(mock_db)
 
-        with patch.dict(os.environ, {"JWT_SECRET": _JWT_SECRET}):
-            with patch("api.dependencies.jwt.decode", return_value={**_VALID_PAYLOAD}):
-                response = client.get("/me", headers={"Authorization": "Bearer tok"})
+        response = client.get("/me", headers={"Authorization": "Bearer tok"})
 
         assert response.status_code == 403
 

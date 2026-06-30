@@ -1,3 +1,221 @@
+# PriceBot Session Summary — Week 4 Dashboard MVP + Dark Mode + History Endpoint
+
+**Date**: 2026-06-30  
+**Status**: ✅ PRODUCTION READY  
+**Tests**: 156/156 passing  
+**Next**: Week 5 (Etsy platform connector)
+
+---
+
+## What Was Accomplished This Session
+
+### 1. GET /repricing/history Endpoint Added
+**File**: `api/routers/repricing.py`  
+**What**: New paginated endpoint returning full price-change audit log for the authenticated user.
+
+```python
+GET /repricing/history?limit=50&offset=0
+
+Response: list[PriceHistoryEntry]
+  - product_title  (joined from products table)
+  - platform, old_price, new_price
+  - strategy, confidence, reasoning
+  - was_auto_applied, applied_at
+```
+
+**Security**: Filters exclusively by `current_user.id` from the validated JWT — tenant isolation guaranteed.  
+**Tests**: 13 new tests added in `tests/unit/test_repricing.py` covering:
+- 200 response shape, field flattening, null join fallback
+- Pagination (limit/offset), ordering (newest first)
+- Auth filtering (user_id from JWT), 422 on invalid params, 500 on DB error
+
+### 2. Full Next.js 14 Dashboard MVP Built (Week 4)
+12 pages built from scratch — 0 TypeScript errors, `npm run build` clean.
+
+| Route | Description |
+|-------|-------------|
+| `/login` | Supabase auth sign-in |
+| `/register` | New account creation, redirects to platform wizard |
+| `/dashboard` | Overview stats (products, cycles used, failed jobs) |
+| `/dashboard/products` | Filterable product table (platform + state filters) |
+| `/dashboard/products/[id]` | Product detail + AI suggestion card + apply button |
+| `/dashboard/platforms` | Platform connections wizard + sync/disconnect |
+| `/dashboard/billing` | Subscription info, usage bars, upgrade CTA |
+| `/dashboard/history` | Full AI reasoning audit log |
+| `/dashboard/settings` | Default margin floor config |
+
+**Components built**:
+- `components/ui/Input.tsx` — Controlled input with label, error, and `rightElement` slot
+- `components/ui/Button.tsx` — Primary / secondary / ghost / danger variants with loading spinner
+- `components/ui/Badge.tsx` — StateBadge, TierBadge + 6 colour variants
+- `components/ui/Card.tsx` — Padded card with CardHeader/CardTitle
+- `components/EmptyState.tsx` — Centred empty state with icon, CTA button
+- `components/PriceSuggestionCard.tsx` — AI recommendation card (strategy, confidence, delta)
+- `components/DashboardNav.tsx` — Sidebar nav with active-state highlighting
+- `components/ProductTable.tsx` — Full product table with StateBadge and action links
+- `components/PlatformWizard.tsx` — 4-step wizard (select → credentials → test → margin floor)
+
+**Library pinning**: `@supabase/supabase-js` pinned to `2.47.2` (Node 18.19.0 compatibility — v2.48+ requires Node 22).
+
+### 3. Password Visibility Toggle
+**Files**: `frontend/app/login/page.tsx`, `frontend/app/register/page.tsx`
+
+- `Eye` / `EyeOff` icons from `lucide-react@1.22.0`
+- `showPassword` state toggles `type="password"` ↔ `type="text"`
+- Passed via the new `rightElement` prop on `Input` component (absolute-positioned inside the field)
+- Accessible: `aria-label` toggles between "Show password" and "Hide password"
+
+### 4. Dark Mode — Full Frontend Coverage
+**Strategy**: Tailwind `darkMode: 'class'` + inline script in `app/layout.tsx` detecting `prefers-color-scheme` before React hydration. No localStorage (resets on page reload per spec). Per-session toggle via Sun/Moon button in `DashboardNav`.
+
+**Files updated with `dark:` classes**:
+
+| Layer | Files |
+|-------|-------|
+| Infrastructure | `tailwind.config.js`, `app/globals.css`, `app/layout.tsx` |
+| UI primitives | `ui/Input.tsx`, `ui/Button.tsx`, `ui/Badge.tsx`, `ui/Card.tsx`, `EmptyState.tsx` |
+| Feature components | `PriceSuggestionCard.tsx`, `DashboardNav.tsx` (+ toggle), `ProductTable.tsx`, `PlatformWizard.tsx` |
+| Auth pages | `app/login/page.tsx`, `app/register/page.tsx` |
+| Dashboard pages | `layout.tsx`, `page.tsx`, `products/page.tsx`, `products/[id]/page.tsx`, `platforms/page.tsx`, `billing/page.tsx`, `history/page.tsx`, `settings/page.tsx` |
+
+**Theme toggle**: `ThemeToggle` component inside `DashboardNav` — reads initial state from `document.documentElement.classList`, toggles `.dark` class on click, stores in local React `useState` only.
+
+### 5. Ruff Lint Cleanup (23 issues fixed)
+Removed all unused imports and variables after switching to Supabase `auth.get_user()` (prior session removed manual JWT decoding but left dead imports):
+
+| File | Fix |
+|------|-----|
+| `api/dependencies.py` | Removed `os`, `jwt`, `ExpiredSignatureError`, `InvalidTokenError` |
+| `api/middleware/rate_limiter.py` | Removed `base64`, `field` |
+| `api/routers/auth.py` | Changed `except AuthApiError as exc:` → `except AuthApiError:` |
+| `db/migrate.py` | Removed `time` |
+| `platforms/mock.py` | Removed `Any` |
+| `workers/batch_poller.py` | Removed `RepricingJobState`; removed unused `job_ids` variable |
+| `api/main.py` | Added `# noqa: E402` on post-`load_dotenv()` imports (intentional order) |
+| `workers/scheduler.py` | Added `# noqa: E402` on post-env-guard imports (intentional order) |
+
+### 6. Auth Guard Test Fix
+**File**: `tests/unit/test_auth_guard.py`
+
+Two tests (`test_inactive_subscription_returns_403`, `test_past_due_subscription_returns_403`) still used a stale `patch("api.dependencies.jwt.decode", ...)` context manager left over from before the Supabase auth migration. The `_mock_db_with_subscription` helper already correctly mocks `db.auth.get_user()` — the stale patches were simply removed.
+
+### 7. Scheduler Async Fix
+**File**: `workers/scheduler.py`
+
+APScheduler runs jobs in threads; `submit_for_user` is `async`. Fixed by wrapping in `asyncio.run()` to create a fresh event loop per thread:
+
+```python
+# Before (crash in threaded context):
+result = submitter.submit_for_user(user_id=user_id, db=db, tier=tier)
+
+# After:
+result = asyncio.run(submitter.submit_for_user(user_id=user_id, db=db, tier=tier))
+```
+
+---
+
+## Test Results
+
+```
+156 tests passed, 0 failed
+  - 17 Amazon connector tests
+  - 8 auth tests (registration flow)
+  - 18 auth guard tests (JWT validation + tier enforcement)
+  - 14 billing webhook tests
+  - 14 crypto tests
+  - 19 price cache tests
+  - 20 rate limiter tests
+  - 13 repricing history tests  ← NEW this session
+  - 8 repricing engine tests
+  - 1 warning: httpx/starlette deprecation (third-party, not ours)
+```
+
+Frontend:
+```
+npm run build: ✓ 0 TypeScript errors, 12/12 pages compiled
+npx tsc --noEmit: ✓ clean
+```
+
+---
+
+## Current DB State (Test User)
+
+**User ID**: `4eb93e47-979c-4cab-814e-e25bf275524b`
+
+```
+id                                    | state | price  | floor | title
+098abf69-9ad0-5931-a09b-8f2d8d1d5289 | IDLE  | $22.99 | $3.60 | Test Product A - Normal Case
+f882dfc7-f431-5d5d-857f-ec8f71b71669 | IDLE  | $23.00 | $8.00 | Test Product B - Guardrail Trigger
+b69bf742-1304-54e7-9978-260b2dae62bb | IDLE  | $49.99 | $5.00 | Test Product C - Premium Case
+8894b55e-4450-56dc-bf82-a890602952c0 | IDLE  | $15.00 | $2.00 | Test Product D - Error Handling
+```
+
+**price_history rows**: 8 (from prior test runs — visible in /dashboard/history)
+
+---
+
+## Architecture: Frontend → Backend Data Flow
+
+```
+Browser (Next.js 14 App Router)
+  └─ Supabase Auth (client-side)  ──→  JWT token
+       └─ fetch() with Bearer JWT  ──→  FastAPI (port 8000)
+            └─ get_current_user()       └─ db.auth.get_user(token)
+                 └─ user_id from JWT         └─ subscriptions table → tier
+                      └─ /repricing/history  ──→  price_history JOIN products
+                           └─ list[PriceHistoryEntry] ──→ history/page.tsx
+```
+
+---
+
+## Important Code Locations
+
+| Concept | File | Notes |
+|---------|------|-------|
+| History endpoint | `api/routers/repricing.py:57-130` | GET /repricing/history, JWT-gated |
+| History tests | `tests/unit/test_repricing.py:TestGetRepricingHistory` | 13 tests |
+| Password toggle | `app/login/page.tsx:16,55-76` | `showPassword` state + Eye/EyeOff |
+| Theme script | `app/layout.tsx` | Inline `prefers-color-scheme` before hydration |
+| Theme toggle | `components/DashboardNav.tsx:ThemeToggle` | Sun/Moon, toggles `.dark` class |
+| Input rightElement | `components/ui/Input.tsx` | Prop for icon slots in password fields |
+| Dashboard overview | `app/dashboard/page.tsx` | Stats cards + recent products |
+| Platform wizard | `components/PlatformWizard.tsx` | 4-step Amazon connection flow |
+
+---
+
+## Quick Reference: Running the Stack
+
+```bash
+# Backend
+ENVIRONMENT=development MOCK_PLATFORM_MODE=true uvicorn api.main:app --reload --port 8000
+
+# Frontend (separate terminal)
+cd frontend && npm run dev   # → http://localhost:3000
+
+# Tests
+python3 -m pytest tests/ -q
+
+# Lint
+python3 -m ruff check core/ api/ workers/ db/ platforms/
+
+# Frontend build check
+cd frontend && npm run build
+```
+
+---
+
+## Next Session: Week 5
+
+**Task**: Implement Etsy platform connector (`platforms/etsy.py`) following `platforms/base.py` abstract interface.
+- Etsy API v3 (OAuth2 + PKCE)
+- `get_products()`, `get_competitor_prices()`, `apply_price()`
+- Wire into `PlatformWizard` step 1 (currently shows "Coming in Week 5")
+- See `docs/PLATFORMS.md` for Etsy API spec and auth flow
+
+**Blockers**: None.
+
+---
+
 # PriceBot Session Summary — Week 3 Worker Pipeline Complete
 
 **Date**: 2026-06-30  

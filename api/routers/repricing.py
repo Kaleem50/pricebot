@@ -2,23 +2,27 @@
 api/routers/repricing.py — Repricing Job Endpoints
 
 Endpoints:
-  - POST /repricing/trigger-cycle  — (dev-only) Trigger batch submission immediately
-  - GET  /repricing/history        — (planned) Paginated price change log
-  - GET  /repricing/jobs           — (planned) Active + recent job states
-  - POST /repricing/jobs/{id}/retry — (planned) Reset a FAILED job back to IDLE
+  - POST /repricing/trigger-cycle        — (dev-only) Trigger batch submission immediately
+  - GET  /repricing/history              — Paginated price change audit log
+  - GET  /repricing/jobs                 — (planned) Active + recent job states
+  - POST /repricing/jobs/{id}/retry      — (planned) Reset a FAILED job back to IDLE
+
+Security invariants (CLAUDE.md §5.4):
+  - Every DB query on /history filters by current_user.id from the validated JWT.
+  - user_id is never read from query params or request body.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import os
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from pydantic import BaseModel
 import jwt
 
-from api.dependencies import Tier, get_db
+from api.dependencies import AuthenticatedUser, Tier, get_current_user, get_db
 from workers.batch_submitter import BatchSubmitter
 from supabase import Client
 
@@ -27,12 +31,102 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/repricing", tags=["repricing"])
 
 
+class PriceHistoryEntry(BaseModel):
+    """One price-change record from the price_history table, enriched with product title."""
+
+    id: str
+    product_title: str
+    platform: str
+    old_price: float
+    new_price: float
+    strategy: str | None
+    confidence: int | None
+    reasoning: str | None
+    was_auto_applied: bool
+    applied_at: datetime
+
+
 class TriggerCycleResponse(BaseModel):
     """Response from trigger-cycle endpoint."""
 
     message: str
     batch_id: str | None = None
     product_count: int | None = None
+
+
+@router.get("/history", response_model=list[PriceHistoryEntry])
+async def get_repricing_history(
+    limit: int = Query(default=50, ge=1, le=200, description="Max records to return"),
+    offset: int = Query(default=0, ge=0, description="Records to skip for pagination"),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_db),
+) -> list[PriceHistoryEntry]:
+    """
+    Return the authenticated user's price change history, newest first.
+
+    Joins price_history with products to include the product title.
+    Results are filtered strictly by user_id from the validated JWT —
+    cross-tenant reads are impossible even if an offset is manipulated.
+
+    Args:
+        limit:  Maximum records to return (1–200, default 50).
+        offset: Records to skip for cursor-style pagination (default 0).
+
+    Returns:
+        List of PriceHistoryEntry, ordered by applied_at DESC.
+
+    Raises:
+        HTTPException 500: On unexpected database errors.
+    """
+    logger.info(
+        "Fetching price history",
+        extra={"user_id": current_user.id, "limit": limit, "offset": offset},
+    )
+
+    try:
+        result = (
+            db.table("price_history")
+            .select(
+                "id, platform, old_price, new_price, strategy, confidence, "
+                "reasoning, was_auto_applied, applied_at, products(title)"
+            )
+            .eq("user_id", current_user.id)
+            .order("applied_at", desc=True)
+            .limit(limit)
+            .offset(offset)
+            .execute()
+        )
+    except Exception as exc:
+        logger.error(
+            "Failed to fetch price history",
+            extra={"user_id": current_user.id, "error": str(exc)},
+        )
+        raise HTTPException(status_code=500, detail="Failed to fetch price history")
+
+    entries: list[PriceHistoryEntry] = []
+    for row in result.data or []:
+        product_info = row.get("products") or {}
+        product_title = product_info.get("title", "Unknown product") if isinstance(product_info, dict) else "Unknown product"
+        entries.append(
+            PriceHistoryEntry(
+                id=row["id"],
+                product_title=product_title,
+                platform=row["platform"],
+                old_price=float(row["old_price"]),
+                new_price=float(row["new_price"]),
+                strategy=row.get("strategy"),
+                confidence=row.get("confidence"),
+                reasoning=row.get("reasoning"),
+                was_auto_applied=bool(row.get("was_auto_applied", False)),
+                applied_at=row["applied_at"],
+            )
+        )
+
+    logger.info(
+        "Price history fetched",
+        extra={"user_id": current_user.id, "count": len(entries)},
+    )
+    return entries
 
 
 @router.post("/trigger-cycle", response_model=TriggerCycleResponse, status_code=202)

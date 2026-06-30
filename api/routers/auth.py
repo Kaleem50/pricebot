@@ -205,7 +205,7 @@ async def login(
         response = db.auth.sign_in_with_password(
             {"email": body.email, "password": body.password}
         )
-    except AuthApiError as exc:
+    except AuthApiError:
         logger.info(
             "Login failed — invalid credentials",
             extra={"email": body.email},
