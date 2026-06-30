@@ -25,7 +25,6 @@ Security constraints (CLAUDE.md §5.4 + SECURITY.md §3):
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -304,9 +303,7 @@ class BatchSubmitter:
 
             # Fetch competitor prices (async)
             try:
-                competitors_bulk = asyncio.run(
-                    connector.get_competitor_prices_bulk(my_products)
-                )
+                competitors_bulk = await connector.get_competitor_prices_bulk(my_products)
             except Exception as exc:
                 logger.error(
                     "Failed to fetch competitor prices",
