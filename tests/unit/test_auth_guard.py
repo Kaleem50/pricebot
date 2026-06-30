@@ -56,14 +56,23 @@ def _make_token(payload: dict | None = None) -> str:
 
 
 def _mock_db_with_subscription(tier: str = "starter", status: str = "active") -> MagicMock:
-    """Return a mock Supabase client that returns the given subscription row."""
+    """Return a mock Supabase client with auth.get_user() and subscription lookup."""
     mock_db = MagicMock()
+
+    # Mock auth.get_user() to return a valid user object
+    mock_user = MagicMock()
+    mock_user.id = _VALID_USER_ID
+    mock_user.email = _VALID_EMAIL
+    mock_db.auth.get_user.return_value = mock_user
+
+    # Mock table queries for subscription lookup
     (
         mock_db.table.return_value
         .select.return_value
         .eq.return_value
         .execute.return_value
     ) = MagicMock(data=[{"tier": tier, "status": status}])
+
     return mock_db
 
 
@@ -109,9 +118,7 @@ class TestGetCurrentUser:
         mock_db = _mock_db_with_subscription(tier="growth", status="active")
         app, client = _make_auth_app(mock_db)
 
-        with patch.dict(os.environ, {"JWT_SECRET": _JWT_SECRET}):
-            with patch("api.dependencies.jwt.decode", return_value={**_VALID_PAYLOAD}):
-                response = client.get("/me", headers={"Authorization": "Bearer sometoken"})
+        response = client.get("/me", headers={"Authorization": "Bearer sometoken"})
 
         assert response.status_code == 200
         data = response.json()
@@ -131,35 +138,30 @@ class TestGetCurrentUser:
         mock_db = _mock_db_with_subscription()
         app, client = _make_auth_app(mock_db)
 
-        with patch.dict(os.environ, {"JWT_SECRET": _JWT_SECRET}):
-            response = client.get("/me", headers={"Authorization": "Token abc123"})
+        response = client.get("/me", headers={"Authorization": "Token abc123"})
 
         assert response.status_code == 401
 
     def test_expired_token_returns_401(self) -> None:
-        """An expired JWT raises HTTP 401 with 'expired' in the detail message."""
-        expired_payload = {**_VALID_PAYLOAD, "exp": int(time.time()) - 3600}
-        expired_token = jwt.encode(expired_payload, _JWT_SECRET, algorithm="HS256")
-
+        """An expired JWT raises HTTP 401."""
         mock_db = _mock_db_with_subscription()
+        mock_db.auth.get_user.side_effect = Exception("Token expired")
         app, client = _make_auth_app(mock_db)
 
-        with patch.dict(os.environ, {"JWT_SECRET": _JWT_SECRET}):
-            response = client.get("/me", headers={"Authorization": f"Bearer {expired_token}"})
+        response = client.get("/me", headers={"Authorization": "Bearer expired_token"})
 
         assert response.status_code == 401
-        assert "expired" in response.json()["detail"].lower()
 
     def test_tampered_token_returns_401(self) -> None:
-        """A JWT with an invalid signature raises HTTP 401."""
+        """A JWT with invalid signature or tampering raises HTTP 401."""
         mock_db = _mock_db_with_subscription()
+        mock_db.auth.get_user.side_effect = Exception("Invalid token")
         app, client = _make_auth_app(mock_db)
 
-        with patch.dict(os.environ, {"JWT_SECRET": _JWT_SECRET}):
-            response = client.get(
-                "/me",
-                headers={"Authorization": "Bearer eyJhbGciOiJIUzI1NiJ9.bad.sig"},
-            )
+        response = client.get(
+            "/me",
+            headers={"Authorization": "Bearer tampered_token"},
+        )
 
         assert response.status_code == 401
 
@@ -178,32 +180,39 @@ class TestGetCurrentUser:
     def test_no_subscription_defaults_to_starter(self) -> None:
         """New user with no subscription row is allowed and defaults to STARTER tier."""
         mock_db = _mock_db_no_subscription()
+        # Mock auth.get_user() even though subscription is empty
+        mock_user = MagicMock()
+        mock_user.id = _VALID_USER_ID
+        mock_user.email = _VALID_EMAIL
+        mock_db.auth.get_user.return_value = mock_user
+
         app, client = _make_auth_app(mock_db)
 
-        with patch.dict(os.environ, {"JWT_SECRET": _JWT_SECRET}):
-            with patch("api.dependencies.jwt.decode", return_value={**_VALID_PAYLOAD}):
-                response = client.get("/me", headers={"Authorization": "Bearer tok"})
+        response = client.get("/me", headers={"Authorization": "Bearer tok"})
 
         assert response.status_code == 200
         assert response.json()["tier"] == "STARTER"
 
     def test_user_id_sourced_from_jwt_sub_not_request(self) -> None:
         """
-        user_id in the response must match the JWT 'sub' claim.
+        user_id in the response must match the JWT 'sub' claim via auth.get_user().
         An attacker-supplied user_id in query params is never used for authorization.
         """
         controlled_user_id = "real-user-id-from-token"
-        payload = {**_VALID_PAYLOAD, "sub": controlled_user_id}
         mock_db = _mock_db_with_subscription()
+        # Override the user.id to the controlled user ID
+        mock_user = MagicMock()
+        mock_user.id = controlled_user_id
+        mock_user.email = _VALID_EMAIL
+        mock_db.auth.get_user.return_value = mock_user
+
         app, client = _make_auth_app(mock_db)
 
-        with patch.dict(os.environ, {"JWT_SECRET": _JWT_SECRET}):
-            with patch("api.dependencies.jwt.decode", return_value=payload):
-                response = client.get(
-                    "/me",
-                    headers={"Authorization": "Bearer tok"},
-                    params={"user_id": "attacker-supplied-id"},
-                )
+        response = client.get(
+            "/me",
+            headers={"Authorization": "Bearer tok"},
+            params={"user_id": "attacker-supplied-id"},
+        )
 
         assert response.status_code == 200
         assert response.json()["id"] == controlled_user_id
@@ -214,9 +223,7 @@ class TestGetCurrentUser:
         mock_db = _mock_db_with_subscription(tier="pro", status="trialing")
         app, client = _make_auth_app(mock_db)
 
-        with patch.dict(os.environ, {"JWT_SECRET": _JWT_SECRET}):
-            with patch("api.dependencies.jwt.decode", return_value={**_VALID_PAYLOAD}):
-                response = client.get("/me", headers={"Authorization": "Bearer tok"})
+        response = client.get("/me", headers={"Authorization": "Bearer tok"})
 
         assert response.status_code == 200
         assert response.json()["tier"] == "PRO"
