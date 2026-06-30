@@ -23,10 +23,10 @@ from platforms.base import BasePlatformConnector
 
 logger = logging.getLogger(__name__)
 
-# Test product fixtures
+# Test product fixtures (UUIDs match seed_test_products.py for consistency)
 _TEST_PRODUCTS = {
-    "prod-a": MyProduct(
-        product_id="prod-a",
+    "098abf69-9ad0-5931-a09b-8f2d8d1d5289": MyProduct(
+        product_id="098abf69-9ad0-5931-a09b-8f2d8d1d5289",
         platform_product_id="ASIN-A001",
         platform_sku="SKU-A001",
         title="Test Product A - Normal Case",
@@ -38,8 +38,8 @@ _TEST_PRODUCTS = {
         platform_context={},
         metadata={},
     ),
-    "prod-b": MyProduct(
-        product_id="prod-b",
+    "f882dfc7-f431-5d5d-857f-ec8f71b71669": MyProduct(
+        product_id="f882dfc7-f431-5d5d-857f-ec8f71b71669",
         platform_product_id="ASIN-B001",
         platform_sku="SKU-B001",
         title="Test Product B - Guardrail Trigger",
@@ -51,8 +51,8 @@ _TEST_PRODUCTS = {
         platform_context={},
         metadata={},
     ),
-    "prod-c": MyProduct(
-        product_id="prod-c",
+    "b69bf742-1304-54e7-9978-260b2dae62bb": MyProduct(
+        product_id="b69bf742-1304-54e7-9978-260b2dae62bb",
         platform_product_id="ASIN-C001",
         platform_sku="SKU-C001",
         title="Test Product C - Premium Case",
@@ -64,8 +64,8 @@ _TEST_PRODUCTS = {
         platform_context={},
         metadata={},
     ),
-    "prod-d": MyProduct(
-        product_id="prod-d",
+    "8894b55e-4450-56dc-bf82-a890602952c0": MyProduct(
+        product_id="8894b55e-4450-56dc-bf82-a890602952c0",
         platform_product_id="ASIN-D001",
         platform_sku="SKU-D001",
         title="Test Product D - Error Handling",
@@ -81,22 +81,22 @@ _TEST_PRODUCTS = {
 
 # Competitor prices per product
 _TEST_COMPETITORS = {
-    "prod-a": [
+    "098abf69-9ad0-5931-a09b-8f2d8d1d5289": [
         CompetitorProduct(price=22.50, platform="amazon", is_fulfilled_by_platform=True, condition="new"),  # type: ignore
         CompetitorProduct(price=23.99, platform="amazon", is_fulfilled_by_platform=False, condition="new"),  # type: ignore
         CompetitorProduct(price=25.50, platform="amazon", is_fulfilled_by_platform=True, condition="new"),  # type: ignore
     ],
-    "prod-b": [
+    "f882dfc7-f431-5d5d-857f-ec8f71b71669": [
         CompetitorProduct(price=18.00, platform="amazon", is_fulfilled_by_platform=False, condition="new"),  # type: ignore
         CompetitorProduct(price=19.50, platform="amazon", is_fulfilled_by_platform=True, condition="new"),  # type: ignore
     ],
-    "prod-c": [
+    "b69bf742-1304-54e7-9978-260b2dae62bb": [
         CompetitorProduct(price=52.00, platform="amazon", is_fulfilled_by_platform=True, condition="new"),  # type: ignore
         CompetitorProduct(price=54.99, platform="amazon", is_fulfilled_by_platform=False, condition="new"),  # type: ignore
         CompetitorProduct(price=48.00, platform="amazon", is_fulfilled_by_platform=True, condition="new"),  # type: ignore
         CompetitorProduct(price=51.50, platform="amazon", is_fulfilled_by_platform=False, condition="new"),  # type: ignore
     ],
-    "prod-d": [
+    "8894b55e-4450-56dc-bf82-a890602952c0": [
         CompetitorProduct(price=14.50, platform="amazon", is_fulfilled_by_platform=True, condition="new"),  # type: ignore
     ],
 }

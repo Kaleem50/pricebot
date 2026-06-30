@@ -24,6 +24,9 @@ import os
 import sys
 from datetime import datetime, timezone
 
+# Add parent directory to path so we can import PriceBot modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from dotenv import load_dotenv
 
 # Load environment before importing PriceBot modules
@@ -35,10 +38,10 @@ from core.crypto import encrypt_credential
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
-# Test products fixture (matches platforms/mock.py)
+# Test products fixture (deterministic UUIDs for reproducibility)
 TEST_PRODUCTS = [
     {
-        "id": "prod-a",
+        "id": "098abf69-9ad0-5931-a09b-8f2d8d1d5289",  # prod-a
         "platform": "amazon",
         "platform_product_id": "ASIN-A001",
         "platform_sku": "SKU-A001",
@@ -48,7 +51,7 @@ TEST_PRODUCTS = [
         "min_margin_floor": 3.60,
     },
     {
-        "id": "prod-b",
+        "id": "f882dfc7-f431-5d5d-857f-ec8f71b71669",  # prod-b
         "platform": "amazon",
         "platform_product_id": "ASIN-B001",
         "platform_sku": "SKU-B001",
@@ -58,7 +61,7 @@ TEST_PRODUCTS = [
         "min_margin_floor": 8.00,
     },
     {
-        "id": "prod-c",
+        "id": "b69bf742-1304-54e7-9978-260b2dae62bb",  # prod-c
         "platform": "amazon",
         "platform_product_id": "ASIN-C001",
         "platform_sku": "SKU-C001",
@@ -68,7 +71,7 @@ TEST_PRODUCTS = [
         "min_margin_floor": 5.00,
     },
     {
-        "id": "prod-d",
+        "id": "8894b55e-4450-56dc-bf82-a890602952c0",  # prod-d
         "platform": "amazon",
         "platform_product_id": "ASIN-D001",
         "platform_sku": "SKU-D001",
@@ -109,8 +112,7 @@ def seed_platform_connection(db, user_id: str) -> None:
     creds_json = json.dumps(creds)
 
     try:
-        key_hex = os.environ.get("CREDENTIAL_ENCRYPTION_KEY", "a" * 64)
-        encrypted_creds = encrypt_credential(creds_json, key_hex)
+        encrypted_creds = encrypt_credential(creds_json)
     except Exception as exc:
         logger.error(f"Failed to encrypt credentials: {exc}")
         sys.exit(1)
@@ -124,8 +126,9 @@ def seed_platform_connection(db, user_id: str) -> None:
                 "is_active": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        ).eq("user_id", user_id).eq("platform", "amazon").execute()
+            },
+            on_conflict="user_id,platform"
+        ).execute()
 
         logger.info(f"✓ Platform connection created for user {user_id}")
     except Exception as exc:
@@ -139,7 +142,7 @@ def seed_products(db, user_id: str) -> list[str]:
 
     for prod_data in TEST_PRODUCTS:
         try:
-            result = db.table("products").upsert(
+            db.table("products").upsert(
                 {
                     "id": prod_data["id"],
                     "user_id": user_id,
@@ -154,8 +157,9 @@ def seed_products(db, user_id: str) -> list[str]:
                     "state": "IDLE",
                     "created_at": datetime.now(timezone.utc).isoformat(),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ).eq("id", prod_data["id"]).execute()
+                },
+                on_conflict="id"
+            ).execute()
 
             product_ids.append(prod_data["id"])
             logger.info(f"✓ Product {prod_data['id']}: {prod_data['title']}")

@@ -5,7 +5,9 @@
       "Bash(python3 -c ' *)",
       "Bash(python3 -m pytest tests/unit/test_billing_webhook.py -v)",
       "Bash(python3 -c \"import stripe; print\\(stripe.__version__\\); print\\(dir\\(stripe\\)\\)\")",
-      "Bash(python3 -m pytest tests/ -v)"
+      "Bash(python3 -m pytest tests/ -v)",
+      "Bash(python3)",
+      "Bash(python3 scripts/seed_test_products.py --user-id 4eb93e47-979c-4cab-814e-e25bf275524b)"
     ]
   }
 }
