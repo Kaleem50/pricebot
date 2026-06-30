@@ -75,7 +75,7 @@ class BatchSubmitter:
             raise ValueError("anthropic_api_key must not be empty")
         self._engine = RepricingEngine(api_key=anthropic_api_key)
 
-    def submit_for_user(
+    async def submit_for_user(
         self, user_id: str, db: Client, tier: Tier
     ) -> dict[str, Any] | None:
         """

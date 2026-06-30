@@ -106,7 +106,7 @@ async def trigger_repricing_cycle(
             raise ValueError("ANTHROPIC_API_KEY not configured")
         engine = RepricingEngine(api_key)
         submitter = BatchSubmitter(engine)
-        result = submitter.submit_for_user(user_id, db, tier)
+        result = await submitter.submit_for_user(user_id, db, tier)
     except Exception as exc:
         logger.error(
             "Batch submission failed during trigger-cycle",
