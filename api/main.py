@@ -39,6 +39,20 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
+# Startup guard: prevent mock connector in production
+_ENVIRONMENT = os.environ.get("ENVIRONMENT", "development").lower()
+_MOCK_MODE = os.environ.get("MOCK_PLATFORM_MODE", "").lower() == "true"
+
+if _ENVIRONMENT == "production" and _MOCK_MODE:
+    logger.critical(
+        "SECURITY VIOLATION: Mock platform mode enabled in production. Refusing to start.",
+        extra={"environment": _ENVIRONMENT, "mock_mode": _MOCK_MODE},
+    )
+    raise RuntimeError(
+        "MOCK_PLATFORM_MODE=true is not allowed in production. "
+        "Mock connector must only be used for testing."
+    )
+
 
 # ---------------------------------------------------------------------------
 # Lifespan

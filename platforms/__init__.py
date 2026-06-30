@@ -5,6 +5,13 @@ Provides get_connector() — the single entry point for instantiating platform
 connectors.  All callers (API routers, workers) must use this factory rather
 than importing connector classes directly.
 
+Mock Connector (Development Only):
+  When environment variable MOCK_PLATFORM_MODE=true, get_connector() returns
+  MockConnector for all platforms. This enables end-to-end testing of the
+  worker pipeline without real platform credentials. MockConnector is never
+  active in production (guarded by startup assertions in api/main.py and
+  workers/scheduler.py).
+
 Adding a new platform:
   1. Create platforms/<name>.py implementing BasePlatformConnector.
   2. Import the class here and add it to _CONNECTOR_REGISTRY.
@@ -19,8 +26,11 @@ Stubs (not yet implemented):
 
 from __future__ import annotations
 
+import os
+
 from platforms.base import BasePlatformConnector
 from platforms.amazon import AmazonConnector
+from platforms.mock import MockConnector
 
 _CONNECTOR_REGISTRY: dict[str, type[BasePlatformConnector]] = {
     "amazon": AmazonConnector,
@@ -41,6 +51,9 @@ def get_connector(
     """
     Instantiate the correct platform connector for the given platform.
 
+    If MOCK_PLATFORM_MODE=true (development only), returns MockConnector
+    for all platforms, bypassing real API credentials.
+
     Args:
         platform:    Platform identifier ('amazon', 'etsy', etc.).
         credentials: Decrypted platform credentials dict.
@@ -57,6 +70,10 @@ def get_connector(
         NotImplementedError: If the platform is valid but connector not yet built.
         ValueError:          If the platform is not a recognised identifier.
     """
+    # Return MockConnector for all platforms in test mode (development only)
+    if os.environ.get("MOCK_PLATFORM_MODE", "").lower() == "true":
+        return MockConnector(credentials=credentials, user_id=user_id, db=db)
+
     if platform not in ALL_PLATFORMS:
         raise ValueError(
             f"Unknown platform: {platform!r}. "
