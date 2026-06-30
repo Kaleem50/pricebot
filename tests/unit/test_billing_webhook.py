@@ -114,14 +114,16 @@ class TestWebhookAuthentication:
     def test_invalid_signature_returns_400(self):
         client = TestClient(app)
         with patch("stripe.Webhook.construct_event") as mock_construct:
-            mock_construct.side_effect = stripe.SignatureVerificationError(
-                "No signatures found", sig_header=_VALID_SIG
-            )
-            resp = client.post(
-                _WEBHOOK_URL,
-                content=b'{"type": "customer.subscription.created"}',
-                headers={"Stripe-Signature": "bad_sig"},
-            )
+            with patch("api.routers.billing._get_stripe_key", return_value="sk_test"):
+                with patch("api.routers.billing._get_webhook_secret", return_value="whsec_test"):
+                    mock_construct.side_effect = stripe.SignatureVerificationError(
+                        "No signatures found", sig_header=_VALID_SIG
+                    )
+                    resp = client.post(
+                        _WEBHOOK_URL,
+                        content=b'{"type": "customer.subscription.created"}',
+                        headers={"Stripe-Signature": "bad_sig"},
+                    )
 
         assert resp.status_code == 400
         assert "signature" in resp.json().get("detail", "").lower()
@@ -130,12 +132,14 @@ class TestWebhookAuthentication:
         client = TestClient(app)
 
         with patch("stripe.Webhook.construct_event") as mock_construct:
-            mock_construct.side_effect = ValueError("Invalid payload")
-            resp = client.post(
-                _WEBHOOK_URL,
-                content=b"not-json-at-all",
-                headers={"Stripe-Signature": _VALID_SIG},
-            )
+            with patch("api.routers.billing._get_stripe_key", return_value="sk_test"):
+                with patch("api.routers.billing._get_webhook_secret", return_value="whsec_test"):
+                    mock_construct.side_effect = ValueError("Invalid payload")
+                    resp = client.post(
+                        _WEBHOOK_URL,
+                        content=b"not-json-at-all",
+                        headers={"Stripe-Signature": _VALID_SIG},
+                    )
 
         assert resp.status_code == 400
 
