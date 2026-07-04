@@ -19,9 +19,10 @@ Adding a new platform:
 
 Currently built connectors:
   - amazon (AmazonConnector) ✅
+  - etsy (EtsyConnector) ✅
 
 Stubs (not yet implemented):
-  - etsy, shopify, ebay, woocommerce
+  - shopify, ebay, woocommerce
 """
 
 from __future__ import annotations
@@ -30,10 +31,12 @@ import os
 
 from platforms.base import BasePlatformConnector
 from platforms.amazon import AmazonConnector
+from platforms.etsy import EtsyConnector
 from platforms.mock import MockConnector
 
 _CONNECTOR_REGISTRY: dict[str, type[BasePlatformConnector]] = {
     "amazon": AmazonConnector,
+    "etsy": EtsyConnector,
 }
 
 SUPPORTED_PLATFORMS = list(_CONNECTOR_REGISTRY.keys())

@@ -40,7 +40,9 @@
       "Bash(python3 -u -)",
       "Bash(echo \"exit=$?\")",
       "Bash(python3 -m pytest tests/integration/test_singleton_isolation.py -v -s)",
-      "Bash(python3 -m pytest tests/integration/test_singleton_isolation.py::TestSingletonIsolation::test_register_then_login_does_not_break_other_users_product_queries -v)"
+      "Bash(python3 -m pytest tests/integration/test_singleton_isolation.py::TestSingletonIsolation::test_register_then_login_does_not_break_other_users_product_queries -v)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
   }
 }

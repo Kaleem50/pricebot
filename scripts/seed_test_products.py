@@ -6,13 +6,14 @@ Creates test products and platform connection in Supabase for end-to-end
 testing of the repricing worker pipeline without real platform credentials.
 
 Usage:
-    python3 scripts/seed_test_products.py [--user-id USER_ID]
+    python3 scripts/seed_test_products.py [--user-id USER_ID] [--platform PLATFORM]
 
 If --user-id is not provided, prompts for one interactively.
+--platform defaults to 'amazon'. Use '--platform etsy' for Etsy test products.
 
 Creates:
-  - 1 platform_connections row (platform='amazon', encrypted mock credentials)
-  - 4 products (prod-a, prod-b, prod-c, prod-d) with state=IDLE
+  - 1 platform_connections row (encrypted mock credentials)
+  - 4 products with state=IDLE (Amazon) or 2 products (Etsy)
 """
 
 from __future__ import annotations
@@ -39,7 +40,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 # Test products fixture (deterministic UUIDs for reproducibility)
-TEST_PRODUCTS = [
+AMAZON_TEST_PRODUCTS = [
     {
         "id": "098abf69-9ad0-5931-a09b-8f2d8d1d5289",  # prod-a
         "platform": "amazon",
@@ -82,6 +83,32 @@ TEST_PRODUCTS = [
     },
 ]
 
+ETSY_TEST_PRODUCTS = [
+    {
+        "id": "c1a2b3d4-e5f6-7890-abcd-ef1234567891",  # etsy-prod-a
+        "platform": "etsy",
+        "platform_product_id": "100000001",
+        "platform_sku": None,
+        "title": "Handmade Ceramic Coffee Mug",
+        "current_price": 28.00,
+        "cost": 8.00,
+        "min_margin_floor": 4.00,
+    },
+    {
+        "id": "d2b3c4e5-f6a7-8901-bcde-f12345678902",  # etsy-prod-b
+        "platform": "etsy",
+        "platform_product_id": "100000002",
+        "platform_sku": None,
+        "title": "Custom Engraved Wooden Cutting Board",
+        "current_price": 45.00,
+        "cost": 15.00,
+        "min_margin_floor": 6.00,
+    },
+]
+
+# Keep backward-compatible alias
+TEST_PRODUCTS = AMAZON_TEST_PRODUCTS
+
 
 def get_user_id(provided: str | None = None) -> str:
     """Get user_id from argument or prompt interactively."""
@@ -99,16 +126,23 @@ def get_user_id(provided: str | None = None) -> str:
     return user_id
 
 
-def seed_platform_connection(db, user_id: str) -> None:
+def seed_platform_connection(db, user_id: str, platform: str) -> None:
     """Create a mock platform_connections row for testing."""
-    # Encrypt dummy credentials for mock connector
-    creds = {
-        "refresh_token": "mock-token",
-        "client_id": "mock-client",
-        "client_secret": "mock-secret",
-        "marketplace_id": "ATVPDKIKX0DER",
-        "merchant_id": "mock-merchant",
-    }
+    if platform == "etsy":
+        creds = {
+            "access_token": "mock-etsy-access-token",
+            "refresh_token": "mock-etsy-refresh-token",
+            "shop_id": "99999999",
+        }
+    else:
+        creds = {
+            "refresh_token": "mock-token",
+            "client_id": "mock-client",
+            "client_secret": "mock-secret",
+            "marketplace_id": "ATVPDKIKX0DER",
+            "merchant_id": "mock-merchant",
+        }
+
     creds_json = json.dumps(creds)
 
     try:
@@ -121,7 +155,7 @@ def seed_platform_connection(db, user_id: str) -> None:
         db.table("platform_connections").upsert(
             {
                 "user_id": user_id,
-                "platform": "amazon",
+                "platform": platform,
                 "encrypted_creds": encrypted_creds,
                 "is_active": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -130,17 +164,18 @@ def seed_platform_connection(db, user_id: str) -> None:
             on_conflict="user_id,platform"
         ).execute()
 
-        logger.info(f"✓ Platform connection created for user {user_id}")
+        logger.info(f"✓ Platform connection created for user {user_id} ({platform})")
     except Exception as exc:
         logger.error(f"Failed to create platform_connections row: {exc}")
         sys.exit(1)
 
 
-def seed_products(db, user_id: str) -> list[str]:
+def seed_products(db, user_id: str, platform: str = "amazon") -> list[str]:
     """Create test products in IDLE state. Return list of product IDs."""
     product_ids = []
+    products = ETSY_TEST_PRODUCTS if platform == "etsy" else AMAZON_TEST_PRODUCTS
 
-    for prod_data in TEST_PRODUCTS:
+    for prod_data in products:
         try:
             db.table("products").upsert(
                 {
@@ -181,9 +216,17 @@ def main() -> None:
         default=None,
         help="Supabase user UUID (prompted if not provided)",
     )
+    parser.add_argument(
+        "--platform",
+        type=str,
+        default="amazon",
+        choices=["amazon", "etsy"],
+        help="Platform to seed test products for (default: amazon)",
+    )
     args = parser.parse_args()
 
     user_id = get_user_id(args.user_id)
+    platform = args.platform
 
     # Validate environment
     if not os.environ.get("SUPABASE_URL"):
@@ -194,7 +237,7 @@ def main() -> None:
         logger.error("SUPABASE_SERVICE_ROLE_KEY environment variable not set")
         sys.exit(1)
 
-    logger.info("\n📦 Seeding test data for worker pipeline testing...\n")
+    logger.info(f"\n📦 Seeding test data for {platform} worker pipeline testing...\n")
 
     try:
         db = get_db()
@@ -203,10 +246,10 @@ def main() -> None:
         sys.exit(1)
 
     # Create platform connection
-    seed_platform_connection(db, user_id)
+    seed_platform_connection(db, user_id, platform)
 
     # Create products
-    product_ids = seed_products(db, user_id)
+    product_ids = seed_products(db, user_id, platform)
 
     # Print summary
     logger.info("\n✅ Test data seeded successfully!\n")
