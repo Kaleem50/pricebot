@@ -30,7 +30,8 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from api.middleware.rate_limiter import RateLimiterMiddleware  # noqa: E402
-from api.routers import auth, billing, platforms, products, repricing  # noqa: E402
+from api.routers import auth, beta, billing, platforms, products, repricing  # noqa: E402
+from core.alerting import install_alerting_handler  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     correct environment is running.  Add resource initialisation (e.g.
     connection pool warm-up) in the startup block as the project grows.
     """
+    install_alerting_handler()
     environment = os.environ.get("ENVIRONMENT", "development")
     logger.info(
         "PriceBot API starting",
@@ -121,6 +123,7 @@ app.include_router(platforms.router)
 app.include_router(products.router)
 app.include_router(repricing.router)
 app.include_router(billing.router)
+app.include_router(beta.router)
 
 
 # ---------------------------------------------------------------------------

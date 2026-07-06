@@ -38,6 +38,7 @@ from supabase import Client
 
 from api.dependencies import Tier
 from core.crypto import decrypt_credential
+from core.notifications import send_price_change_email
 from core.repricing_engine import RepricingEngine
 from platforms import get_connector
 
@@ -522,6 +523,44 @@ class BatchPoller:
                 except Exception as exc:
                     logger.error(
                         "Failed to write price_history",
+                        extra={
+                            "product_id": product_id,
+                            "user_id": user_id,
+                            "error": str(exc),
+                        },
+                    )
+
+                # Send price-change notification email (non-blocking).
+                # Email failure must never block or fail the repricing job.
+                try:
+                    # service_role client has admin access to auth.users
+                    user_obj = db.auth.admin.get_user_by_id(user_id)
+                    user_email = (
+                        user_obj.user.email
+                        if user_obj and user_obj.user
+                        else None
+                    )
+                    if user_email:
+                        send_price_change_email(
+                            user_email=user_email,
+                            product_title=product.title,
+                            old_price=product.current_price,
+                            new_price=recommendation.final_price,
+                            strategy=recommendation.strategy,
+                            reasoning=recommendation.reasoning,
+                            confidence=recommendation.confidence,
+                            was_auto_applied=price_applied,
+                            guardrail_applied=(
+                                recommendation.final_price
+                                != getattr(recommendation, "recommended_price", recommendation.final_price)
+                            ),
+                            product_id=product_id,
+                            user_id=user_id,
+                            db=db,
+                        )
+                except Exception as exc:
+                    logger.error(
+                        "Email notification failed — repricing job continues",
                         extra={
                             "product_id": product_id,
                             "user_id": user_id,

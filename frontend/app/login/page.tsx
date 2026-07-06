@@ -87,6 +87,13 @@ export default function LoginPage() {
             Create one free
           </Link>
         </p>
+
+        <p className="mt-2 text-center text-sm text-gray-400 dark:text-gray-500">
+          Interested in beta access?{' '}
+          <Link href="/beta" className="font-medium text-blue-500 hover:underline dark:text-blue-400">
+            Join the waitlist →
+          </Link>
+        </p>
       </div>
     </div>
   )
