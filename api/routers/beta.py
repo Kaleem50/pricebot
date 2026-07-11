@@ -347,10 +347,19 @@ async def list_beta_requests(
             .execute()
         )
     except Exception as exc:
+        error_msg = str(exc)
         logger.error(
             "Failed to fetch beta requests",
-            extra={"error": str(exc)},
+            extra={
+                "error": error_msg,
+                "error_type": type(exc).__name__,
+            },
         )
-        raise HTTPException(status_code=500, detail="Failed to retrieve beta requests")
+        # Return a more informative error for debugging
+        detail_msg = error_msg[:200] if error_msg else "Unknown database error"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve beta requests: {detail_msg}",
+        )
 
     return result.data
